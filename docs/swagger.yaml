@@ -1,0 +1,1502 @@
+basePath: /
+definitions:
+  github_com_patrick_cocobase_internal_dto.AppUserLoginRequest:
+    description: Login credentials for app user authentication
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: password123
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_patrick_cocobase_internal_dto.AppUserResponse:
+    description: App user data returned in API responses
+    properties:
+      client_id:
+        example: project-uuid
+        type: string
+      created_at:
+        example: "2024-01-01T00:00:00Z"
+        type: string
+      data:
+        additionalProperties: true
+        type: object
+      email:
+        example: user@example.com
+        type: string
+      email_verified:
+        example: false
+        type: boolean
+      email_verified_at:
+        type: string
+      id:
+        example: uuid-here
+        type: string
+      phone_number:
+        type: string
+      phone_verified_at:
+        type: string
+      roles:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_patrick_cocobase_internal_dto.AppUserSignupRequest:
+    description: Signup data for creating a new app user
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: password123
+        minLength: 6
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_patrick_cocobase_internal_dto.AppUserUpdateRequest:
+    description: Fields to update on the authenticated user
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+      email:
+        example: new@example.com
+        type: string
+      password:
+        example: newpassword123
+        minLength: 6
+        type: string
+    type: object
+  github_com_patrick_cocobase_internal_dto.TokenResponse:
+    description: JWT token and user data returned after successful authentication
+    properties:
+      access_token:
+        example: eyJhbGci...
+        type: string
+      message:
+        example: ""
+        type: string
+      requires_2fa:
+        example: false
+        type: boolean
+      user:
+        $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserResponse'
+    type: object
+  github_com_patrick_cocobase_internal_models.AggregateResponse:
+    properties:
+      collection:
+        type: string
+      field:
+        type: string
+      operation:
+        type: string
+      result: {}
+    type: object
+  github_com_patrick_cocobase_internal_models.BatchCreateRequest:
+    properties:
+      documents:
+        items:
+          additionalProperties: true
+          type: object
+        type: array
+    required:
+    - documents
+    type: object
+  github_com_patrick_cocobase_internal_models.BatchDeleteRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    required:
+    - ids
+    type: object
+  github_com_patrick_cocobase_internal_models.BatchUpdateRequest:
+    properties:
+      updates:
+        items:
+          properties:
+            data:
+              additionalProperties: true
+              type: object
+            id:
+              type: string
+          type: object
+        type: array
+    required:
+    - updates
+    type: object
+  github_com_patrick_cocobase_internal_models.CollectionCreateRequest:
+    properties:
+      name:
+        type: string
+      permissions:
+        $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionPermissionsRequest'
+      webhook_url:
+        type: string
+    required:
+    - name
+    type: object
+  github_com_patrick_cocobase_internal_models.CollectionPermissionsRequest:
+    properties:
+      create:
+        items:
+          type: string
+        type: array
+      delete:
+        items:
+          type: string
+        type: array
+      read:
+        items:
+          type: string
+        type: array
+      update:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_patrick_cocobase_internal_models.CollectionResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      permissions:
+        $ref: '#/definitions/github_com_patrick_cocobase_internal_models.Permissions'
+      project_id:
+        type: string
+      webhook_url:
+        type: string
+    type: object
+  github_com_patrick_cocobase_internal_models.CollectionUpdateRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  github_com_patrick_cocobase_internal_models.CountResponse:
+    properties:
+      count:
+        type: integer
+    type: object
+  github_com_patrick_cocobase_internal_models.DocumentCreateRequest:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+    required:
+    - data
+    type: object
+  github_com_patrick_cocobase_internal_models.DocumentResponse:
+    properties:
+      collection_id:
+        type: string
+      created_at:
+        type: string
+      data:
+        additionalProperties: true
+        type: object
+      id:
+        type: string
+    type: object
+  github_com_patrick_cocobase_internal_models.DocumentUpdateRequest:
+    properties:
+      data:
+        additionalProperties: true
+        type: object
+    required:
+    - data
+    type: object
+  github_com_patrick_cocobase_internal_models.FieldInfo:
+    properties:
+      null_percentage:
+        type: number
+      nullable:
+        type: boolean
+      primary_type:
+        type: string
+      samples:
+        items: {}
+        type: array
+      types:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_patrick_cocobase_internal_models.Permissions:
+    properties:
+      create:
+        items:
+          type: string
+        type: array
+      delete:
+        items:
+          type: string
+        type: array
+      read:
+        items:
+          type: string
+        type: array
+      update:
+        items:
+          type: string
+        type: array
+    type: object
+  github_com_patrick_cocobase_internal_models.RelationshipInfo:
+    properties:
+      confidence:
+        type: string
+      field:
+        type: string
+      target_collection:
+        type: string
+      type:
+        type: string
+    type: object
+  github_com_patrick_cocobase_internal_models.SchemaResponse:
+    properties:
+      analyzed_documents:
+        type: integer
+      collection:
+        type: string
+      detected_relationships:
+        additionalProperties:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.RelationshipInfo'
+        type: object
+      document_count:
+        type: integer
+      fields:
+        additionalProperties:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.FieldInfo'
+        type: object
+      usage_hint:
+        type: string
+    type: object
+  internal_api_handlers.NotificationMessage:
+    properties:
+      channel:
+        type: string
+      data:
+        additionalProperties: true
+        type: object
+      from:
+        type: string
+      project_id:
+        type: string
+      timestamp:
+        type: string
+      type:
+        description: '"notification", "broadcast", "channel"'
+        type: string
+    type: object
+host: localhost:3000
+info:
+  contact:
+    email: support@cocobase.io
+    name: Cocobase Support
+  description: Backend as a Service with flexible collections and document management
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Cocobase API
+  version: "1.0"
+paths:
+  /auth-collections/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate an app user with email and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: App user login
+      tags:
+      - App Client
+  /auth-collections/login-google:
+    get:
+      description: Get Google OAuth URL for authentication
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Initiate Google OAuth login
+      tags:
+      - App Client
+  /auth-collections/signup:
+    post:
+      consumes:
+      - application/json
+      description: Create a new app user account
+      parameters:
+      - description: User data
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserSignupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.TokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: App user signup
+      tags:
+      - App Client
+  /auth-collections/user:
+    get:
+      description: Get the currently authenticated app user's details
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current app user
+      tags:
+      - App Client
+    patch:
+      consumes:
+      - application/json
+      description: Update the currently authenticated app user's details
+      parameters:
+      - description: User update data
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update current app user
+      tags:
+      - App Client
+  /auth-collections/users:
+    get:
+      description: Get all app users for the current project
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List app users
+      tags:
+      - App Client
+  /auth-collections/users/{id}:
+    get:
+      description: Get a specific app user by their ID
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_dto.AppUserResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get app user by ID
+      tags:
+      - App Client
+  /auth-collections/verify-google-token:
+    post:
+      consumes:
+      - application/json
+      description: Verify Google access token obtained by frontend
+      parameters:
+      - description: Google access token
+        in: body
+        name: token
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Verify Google token from frontend
+      tags:
+      - App Client
+  /collections:
+    post:
+      consumes:
+      - application/json
+      description: Create a new collection with optional permissions
+      parameters:
+      - description: Collection data
+        in: body
+        name: collection
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new collection
+      tags:
+      - Collections
+  /collections/{id}:
+    delete:
+      description: Delete a collection and all its documents
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete a collection
+      tags:
+      - Collections
+    get:
+      description: Retrieve a collection by its ID or name
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get a collection
+      tags:
+      - Collections
+    patch:
+      consumes:
+      - application/json
+      description: Update a collection. Use helper function, invalidate cache after
+        update.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update data
+        in: body
+        name: collection
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CollectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update collection
+      tags:
+      - Collections
+  /collections/{id}/documents:
+    get:
+      description: List all documents in a collection with filtering, sorting, and
+        concurrent optimizations. Returns array directly.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - default: 100
+        description: Number of documents per page
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of documents to skip
+        in: query
+        name: offset
+        type: integer
+      - default: created_at
+        description: Field to sort by
+        in: query
+        name: sort
+        type: string
+      - default: desc
+        description: Sort order (asc/desc)
+        in: query
+        name: order
+        type: string
+      - description: Related fields to populate (comma-separated)
+        in: query
+        name: populate
+        type: string
+      - description: Fields to select (comma-separated)
+        in: query
+        name: select
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Array of documents
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List documents
+      tags:
+      - Documents
+  /collections/{id}/documents/{docId}:
+    delete:
+      description: Delete a document. Uses helper function, synchronize_session=False,
+        invalidate cache after deletion.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        in: path
+        name: docId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete document
+      tags:
+      - Documents
+    get:
+      description: Get a single document by ID. Removed cache decorator for security.
+        Uses helper function with eager loading.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        in: path
+        name: docId
+        required: true
+        type: string
+      - description: Related fields to populate
+        in: query
+        name: populate
+        type: string
+      - description: Fields to select
+        in: query
+        name: select
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get document
+      tags:
+      - Documents
+    patch:
+      consumes:
+      - application/json
+      description: Update a document. Merges data instead of replace (safer). Invalidate
+        cache after update.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document ID
+        in: path
+        name: docId
+        required: true
+        type: string
+      - description: Document updates
+        in: body
+        name: document
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Edit document
+      tags:
+      - Documents
+  /collections/{id}/documents/batch-create:
+    post:
+      consumes:
+      - application/json
+      description: Create multiple documents in a single transaction. Optimized for
+        bulk inserts.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Documents to create
+        in: body
+        name: documents
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.BatchCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Batch create documents
+      tags:
+      - Batch Operations
+  /collections/{id}/documents/batch-delete:
+    post:
+      consumes:
+      - application/json
+      description: Delete multiple documents at once. Single query for optimal performance.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document IDs to delete
+        in: body
+        name: deletes
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.BatchDeleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Batch delete documents
+      tags:
+      - Batch Operations
+  /collections/{id}/documents/batch-update:
+    post:
+      consumes:
+      - application/json
+      description: Update multiple documents at once. Batch operation reduces queries.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document updates
+        in: body
+        name: updates
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.BatchUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Batch update documents
+      tags:
+      - Batch Operations
+  /collections/{id}/documents/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Create a document and automatically upload files to S3, adding
+        URLs to the document
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Document data as JSON string
+        in: formData
+        name: data
+        required: true
+        type: string
+      - description: Field name to store file URL (defaults to 'file_url')
+        in: formData
+        name: file_field
+        type: string
+      - description: File to upload
+        in: formData
+        name: file
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "413":
+          description: Request Entity Too Large
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create document with file upload
+      tags:
+      - Documents
+  /collections/{id}/query/documents/aggregate:
+    get:
+      description: Perform aggregation operations (count, sum, avg, min, max) on document
+        fields
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Field to aggregate
+        in: query
+        name: field
+        required: true
+        type: string
+      - default: count
+        description: Aggregation operation (count, sum, avg, min, max)
+        in: query
+        name: operation
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.AggregateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Aggregate documents
+      tags:
+      - Advanced Queries
+  /collections/{id}/query/documents/count:
+    get:
+      description: Count documents matching filters without returning the documents.
+        Useful for pagination and statistics.
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.CountResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Count documents
+      tags:
+      - Advanced Queries
+  /collections/{id}/query/documents/group-by:
+    get:
+      description: Group documents by a field and count occurrences
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Field to group by
+        in: query
+        name: field
+        required: true
+        type: string
+      - description: 'Field to count (default: document count)'
+        in: query
+        name: count_field
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              additionalProperties: true
+              type: object
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Group by field
+      tags:
+      - Advanced Queries
+  /collections/{id}/query/schema:
+    get:
+      description: Analyze collection and return inferred schema with field types
+        and detected relationships
+      parameters:
+      - description: Collection ID or Name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.SchemaResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get collection schema
+      tags:
+      - Advanced Queries
+  /collections/{id}/realtime:
+    get:
+      description: WebSocket endpoint for real-time document changes. Send API key
+        as first message.
+      parameters:
+      - description: Collection ID or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses: {}
+      summary: Subscribe to real-time collection updates
+      tags:
+      - Realtime
+  /collections/{id}/realtime/stats:
+    get:
+      description: Get statistics about active WebSocket connections
+      parameters:
+      - description: Collection ID or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get real-time connection statistics
+      tags:
+      - Realtime
+  /collections/documents:
+    post:
+      consumes:
+      - application/json
+      description: Create a new document with collection specified as query parameter
+        (Python API compatibility)
+      parameters:
+      - description: Collection ID or Name
+        in: query
+        name: collection
+        required: true
+        type: string
+      - description: Document data
+        in: body
+        name: document
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentCreateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_patrick_cocobase_internal_models.DocumentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Create a document (legacy)
+      tags:
+      - Documents
+  /collections/file:
+    delete:
+      description: Delete a file from project storage
+      parameters:
+      - description: Filename to delete
+        in: query
+        name: filename
+        required: true
+        type: string
+      - description: Subdirectory path
+        in: query
+        name: subdirectory
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Delete project file
+      tags:
+      - Collections
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a file to Backblaze B2 storage with storage limit checking
+      parameters:
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Subdirectory path within project folder
+        in: query
+        name: subdirectory
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "413":
+          description: Request Entity Too Large
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Upload file to project
+      tags:
+      - Collections
+  /collections/files:
+    get:
+      description: List all files uploaded to project storage
+      parameters:
+      - description: Subdirectory to list files from
+        in: query
+        name: subdirectory
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: List project files
+      tags:
+      - Collections
+  /notifications/channel/{channel}:
+    get:
+      description: 'WebSocket for channel-specific peer-to-peer notifications. Send
+        auth: {"api_key": "YOUR_API_KEY", "channel": "chat-room-1"}'
+      parameters:
+      - description: Channel name
+        in: path
+        name: channel
+        required: true
+        type: string
+      responses: {}
+      summary: Subscribe to channel notifications
+      tags:
+      - Notifications
+  /notifications/global:
+    get:
+      description: 'WebSocket for global peer-to-peer notifications. Send auth message:
+        {"api_key": "YOUR_API_KEY"}'
+      responses: {}
+      summary: Subscribe to global notifications
+      tags:
+      - Notifications
+  /notifications/send:
+    post:
+      consumes:
+      - application/json
+      description: Send a notification to global or channel subscribers
+      parameters:
+      - description: Notification data
+        in: body
+        name: notification
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_handlers.NotificationMessage'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Send a notification
+      tags:
+      - Notifications
+  /notifications/stats:
+    get:
+      description: Get statistics about active notification connections
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get notification statistics
+      tags:
+      - Notifications
+  /realtime/stats:
+    get:
+      description: Get WebSocket connection statistics for all collections
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Get all real-time statistics
+      tags:
+      - Realtime
+schemes:
+- http
+- https
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    description: Type "Bearer" followed by a space and API key.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
