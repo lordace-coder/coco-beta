@@ -29,7 +29,7 @@ func Connect(databaseURL string, debug bool) error {
 		Logger:               logger.Default.LogMode(logLevel),
 		DisableAutomaticPing: false,
 		SkipDefaultTransaction: true,
-		PrepareStmt:          true,
+		PrepareStmt:          false, // caching prepared statements causes unbounded memory growth
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -74,7 +74,7 @@ func Connect(databaseURL string, debug bool) error {
 }
 
 // schemaVersion is the current schema version. Bump this whenever you add new models or columns.
-const schemaVersion = 5
+const schemaVersion = 6
 
 type schemaVersionRow struct {
 	Version int `gorm:"primaryKey"`
@@ -123,6 +123,8 @@ func Migrate() error {
 		&models.AdminUser{},
 		&models.DashboardConfig{},
 		&models.ActivityLog{},
+		// Cloud functions
+		&models.Function{},
 	); err != nil {
 		return fmt.Errorf("auto-migrate failed: %w", err)
 	}
@@ -133,6 +135,21 @@ func Migrate() error {
 
 	log.Printf("✅ Schema migration to version %d complete", schemaVersion)
 	return nil
+}
+
+// ClearCollectionCache is called by the system cron to evict stale collection name→ID cache.
+// The actual cache lives in the handlers package; this is a no-op hook that packages
+// can override by registering a callback.
+var collectionCacheClearer func()
+
+func RegisterCollectionCacheClearer(fn func()) {
+	collectionCacheClearer = fn
+}
+
+func ClearCollectionCache() {
+	if collectionCacheClearer != nil {
+		collectionCacheClearer()
+	}
 }
 
 // Close closes the database connection

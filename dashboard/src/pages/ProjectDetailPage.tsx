@@ -8,8 +8,9 @@ import { UsersTab } from "./project/UsersTab";
 import { CollectionsTab } from "./project/CollectionsTab";
 import { FilesTab } from "./project/FilesTab";
 import { LogsTab } from "./project/LogsTab";
+import { FunctionsTab } from "./project/FunctionsTab";
 
-type Tab = "overview" | "settings" | "users" | "collections" | "files" | "logs";
+type Tab = "overview" | "settings" | "users" | "collections" | "files" | "logs" | "functions";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -17,6 +18,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "users", label: "Users" },
   { key: "collections", label: "Collections" },
   { key: "files", label: "Files" },
+  { key: "functions", label: "Functions" },
   { key: "logs", label: "Logs" },
 ];
 
@@ -78,6 +80,7 @@ export default function ProjectDetailPage() {
       {tab === "users" && <UsersTab projectId={id!} />}
       {tab === "collections" && <CollectionsTab projectId={id!} />}
       {tab === "files" && <FilesTab projectId={id!} />}
+      {tab === "functions" && <FunctionsTab projectId={id!} />}
       {tab === "logs" && <LogsTab projectId={id!} />}
     </div>
   );

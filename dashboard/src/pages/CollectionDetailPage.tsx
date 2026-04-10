@@ -86,7 +86,7 @@ export default function CollectionDetailPage() {
           form.append(key, file);
         }
         const base = window.location.origin;
-        await fetch(`${base}/api/v1/collections/${col?.name}/documents`, {
+        await fetch(`${base}/collections/${colId}/documents`, {
           method: "POST",
           headers: { "x-api-key": project.api_key },
           body: form,

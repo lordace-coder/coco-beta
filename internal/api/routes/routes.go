@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/patrick/cocobase/internal/api/handlers"
+	"github.com/patrick/cocobase/internal/api/middleware"
 	"github.com/patrick/cocobase/pkg/config"
 )
 
@@ -19,6 +20,9 @@ func SetupRoutes(app *fiber.App) {
 
 	// Setup collection routes
 	SetupCollectionRoutes(app)
+
+	// Setup cloud function HTTP routes  (/fn/* — requires API key)
+	app.All("/fn/*", middleware.RequireAPIKey, handlers.HandleHTTPFunction)
 
 	// Setup auth routes
 	SetupAuthRoutes(app)

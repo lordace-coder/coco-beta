@@ -21,4 +21,11 @@ func init() {
 func InitHandlerServices() {
 	queryBuilder = services.NewQueryBuilder(database.DB)
 	relationshipResolver = services.NewRelationshipResolver()
+	// Register the collection cache clearer so the system cron can evict it
+	database.RegisterCollectionCacheClearer(func() {
+		collectionCache.Range(func(k, _ interface{}) bool {
+			collectionCache.Delete(k)
+			return true
+		})
+	})
 }

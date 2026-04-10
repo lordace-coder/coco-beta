@@ -23,6 +23,7 @@ import (
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 	"github.com/patrick/cocobase/internal/services"
+	fnservice "github.com/patrick/cocobase/internal/services/functions"
 	"github.com/patrick/cocobase/pkg/config"
 	"github.com/patrick/cocobase/pkg/logger"
 	"golang.org/x/crypto/bcrypt"
@@ -296,6 +297,10 @@ func runServe() {
 	}
 
 	dashhandlers.LoadDashboardConfigIntoAppConfig()
+
+	// Start cron scheduler (built-in system jobs + user-defined cron functions)
+	fnservice.StartScheduler()
+	defer fnservice.StopScheduler()
 
 	app := fiber.New(fiber.Config{
 		AppName:      "Cocobase v0.1.0",

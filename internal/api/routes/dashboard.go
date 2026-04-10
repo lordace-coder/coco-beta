@@ -81,6 +81,15 @@ func SetupDashboardRoutes(app *fiber.App) {
 	projects.Put("/:id/integrations/:integrationName", dashboard.UpsertProjectIntegration)
 	projects.Delete("/:id/integrations/:piId", dashboard.DeleteProjectIntegration)
 
+	// Project → cloud functions
+	projects.Get("/:id/functions", dashboard.ListFunctions)
+	projects.Post("/:id/functions", dashboard.CreateFunction)
+	projects.Get("/:id/functions/routes", dashboard.ListHTTPRoutes)
+	projects.Get("/:id/functions/:fnId", dashboard.GetFunction)
+	projects.Patch("/:id/functions/:fnId", dashboard.UpdateFunction)
+	projects.Delete("/:id/functions/:fnId", dashboard.DeleteFunction)
+	projects.Post("/:id/functions/:fnId/run", dashboard.RunFunction)
+
 	// ── Serve embedded React SPA at /_/* ──────────────────────────────────────
 	app.Get("/_", serveSPA)
 	app.Get("/_/*", serveSPA)

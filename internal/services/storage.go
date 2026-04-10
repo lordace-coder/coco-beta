@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -122,8 +123,12 @@ func uploadToLocal(fileContent []byte, projectID, filename, subdirectory string)
 
 	log.Printf("✅ Saved file locally at '%s'", dst)
 
-	// URL is the public path that Fiber's static middleware will serve.
-	url := "/uploads/" + rel
+	// Build the full public URL so external clients can fetch the file directly.
+	base := "http://localhost:3000"
+	if config.AppConfig != nil && config.AppConfig.Port != "" {
+		base = fmt.Sprintf("http://localhost:%s", config.AppConfig.Port)
+	}
+	url := base + "/uploads/" + rel
 
 	return &FileUploadResult{
 		Filename:     filename,
@@ -323,4 +328,44 @@ func buildKey(projectID, subdirectory, filename string) string {
 		key = fmt.Sprintf("%s/%s", key, subdirectory)
 	}
 	return fmt.Sprintf("%s/%s", key, filename)
+}
+
+// DeleteDocumentFiles scans every value in a document's data map and removes any
+// files that were stored via local disk storage. Safe to call even when S3 is
+// configured (it only acts on /uploads/ URLs). Call this before or after the DB
+// delete — order doesn't matter.
+func DeleteDocumentFiles(data map[string]interface{}) {
+	if data == nil {
+		return
+	}
+	for _, v := range data {
+		switch val := v.(type) {
+		case string:
+			deleteLocalFileByURL(val)
+		case []interface{}:
+			for _, item := range val {
+				if s, ok := item.(string); ok {
+					deleteLocalFileByURL(s)
+				}
+			}
+		}
+	}
+}
+
+// deleteLocalFileByURL removes the file on disk that a /uploads/... URL points to.
+// Ignores anything that isn't a local upload URL.
+func deleteLocalFileByURL(url string) {
+	// Match both relative (/uploads/...) and full (http://localhost:.../uploads/...)
+	const marker = "/uploads/"
+	idx := strings.Index(url, marker)
+	if idx == -1 {
+		return
+	}
+	rel := url[idx+len(marker):] // e.g. "projects/<id>/collections/<id>/file.jpg"
+	dst := filepath.Join(localUploadsDir, filepath.FromSlash(rel))
+	if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+		log.Printf("⚠️  Failed to delete local file %s: %v", dst, err)
+	} else {
+		log.Printf("🗑️  Deleted local file: %s", dst)
+	}
 }

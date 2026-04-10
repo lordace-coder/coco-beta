@@ -12,6 +12,7 @@ import (
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 	"github.com/patrick/cocobase/internal/services"
+	fnservice "github.com/patrick/cocobase/internal/services/functions"
 )
 
 // checkSentinel evaluates a sentinel expression for the current request/doc.
@@ -95,6 +96,11 @@ func CreateDocument(c *fiber.Ctx) error {
 		return err
 	}
 
+	// beforeCreate hook — can cancel
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeCreate, project.ID, collection, req.Data, appUser, BroadcastToProject); cancelled {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
+	}
+
 	// pre_save webhook (fire-and-forget — does not block create)
 	services.FireWebhook(collection.Webhooks.PreSave, "pre_save", collection.ID, "", req.Data)
 
@@ -105,6 +111,9 @@ func CreateDocument(c *fiber.Ctx) error {
 
 	// post_save webhook
 	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
+
+	// afterCreate hook — fire-and-forget
+	go fnservice.DispatchHook(models.HookAfterCreate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
 	go BroadcastDocumentChange(collection.ID, "created", &document, project.ID)
 	return c.Status(fiber.StatusCreated).JSON(toDocumentResponse(&document))
@@ -415,6 +424,11 @@ func UpdateDocument(c *fiber.Ctx) error {
 		}
 	}
 
+	// beforeUpdate hook — can cancel
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeUpdate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
+	}
+
 	// pre_save webhook
 	services.FireWebhook(collection.Webhooks.PreSave, "pre_save", collection.ID, document.ID, map[string]interface{}(document.Data))
 
@@ -424,6 +438,9 @@ func UpdateDocument(c *fiber.Ctx) error {
 
 	// post_save webhook
 	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
+
+	// afterUpdate hook — fire-and-forget
+	go fnservice.DispatchHook(models.HookAfterUpdate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
 	go BroadcastDocumentChange(collection.ID, "updated", &document, project.ID)
 
@@ -472,6 +489,11 @@ func DeleteDocument(c *fiber.Ctx) error {
 		return err
 	}
 
+	// beforeDelete hook — can cancel
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeDelete, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
+	}
+
 	// pre_delete webhook
 	services.FireWebhook(collection.Webhooks.PreDelete, "pre_delete", collection.ID, document.ID, map[string]interface{}(document.Data))
 
@@ -479,12 +501,18 @@ func DeleteDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete document"})
 	}
 
+	// Remove any locally-stored files referenced by this document.
+	go services.DeleteDocumentFiles(map[string]interface{}(document.Data))
+
 	// Evict cache on delete
 	cacheKey := fmt.Sprintf("col:%s:%s", project.ID, collectionID)
 	collectionCache.Delete(cacheKey)
 
 	// post_delete webhook
 	services.FireWebhook(collection.Webhooks.PostDelete, "post_delete", collection.ID, document.ID, map[string]interface{}(document.Data))
+
+	// afterDelete hook — fire-and-forget
+	go fnservice.DispatchHook(models.HookAfterDelete, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
 	go BroadcastDocumentChange(collection.ID, "deleted", &document, project.ID)
 

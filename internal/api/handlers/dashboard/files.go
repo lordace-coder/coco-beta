@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -10,9 +11,17 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gofiber/fiber/v2"
-	applogger "github.com/patrick/cocobase/pkg/logger"
+	"github.com/patrick/cocobase/internal/services"
 	"github.com/patrick/cocobase/pkg/config"
+	applogger "github.com/patrick/cocobase/pkg/logger"
 )
+
+type fileEntry struct {
+	Key          string    `json:"key"`
+	Size         int64     `json:"size"`
+	LastModified time.Time `json:"last_modified"`
+	URL          string    `json:"url"`
+}
 
 // ListFiles handles GET /_/api/projects/:id/files
 func ListFiles(c *fiber.Ctx) error {
@@ -21,6 +30,27 @@ func ListFiles(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 
+	// ── Local storage fallback ────────────────────────────────────────────────
+	if services.IsLocalStorage() {
+		files, err := services.GetFiles(projectID, "")
+		if err != nil {
+			applogger.Error("ListFiles (local): %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": err.Error()})
+		}
+
+		entries := make([]fileEntry, 0, len(files))
+		for _, f := range files {
+			entries = append(entries, fileEntry{
+				Key:          f.Filename,
+				Size:         f.Size,
+				LastModified: f.LastModified,
+				URL:          f.URL,
+			})
+		}
+		return c.JSON(fiber.Map{"data": entries, "total": len(entries)})
+	}
+
+	// ── S3 / Backblaze path ───────────────────────────────────────────────────
 	prefix := c.Query("prefix", "")
 	if prefix == "" {
 		prefix = projectID + "/"
@@ -30,7 +60,7 @@ func ListFiles(c *fiber.Ctx) error {
 
 	client, bucket, err := newS3Client()
 	if err != nil {
-		applogger.Error("ListFiles: storage not configured or S3 init failed: %v", err)
+		applogger.Error("ListFiles: %v", err)
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error":   true,
 			"message": "Storage is not configured. Add BACKBLAZE_KEY_ID, BACKBLAZE_APPLICATION_KEY, BUCKET_NAME, and BUCKET_ENDPOINT to your .env",
@@ -46,15 +76,8 @@ func ListFiles(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": fmt.Sprintf("Failed to list files: %v", err)})
 	}
 
-	type fileEntry struct {
-		Key          string    `json:"key"`
-		Size         int64     `json:"size"`
-		LastModified time.Time `json:"last_modified"`
-		URL          string    `json:"url"`
-	}
-
-	files := make([]fileEntry, 0, len(out.Contents))
 	cfg := config.AppConfig
+	files := make([]fileEntry, 0, len(out.Contents))
 	for _, obj := range out.Contents {
 		key := aws.StringValue(obj.Key)
 		files = append(files, fileEntry{
@@ -82,13 +105,25 @@ func DeleteFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "key is required"})
 	}
 
+	// ── Local storage fallback ────────────────────────────────────────────────
+	if services.IsLocalStorage() {
+		// Key is the filename returned by ListFiles (just the base name).
+		// Map it back to its path under the uploads dir.
+		dst := services.LocalUploadsDir() + "/projects/" + projectID + "/" + req.Key
+		if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": fmt.Sprintf("Failed to delete file: %v", err)})
+		}
+		return c.JSON(fiber.Map{"message": "File deleted", "key": req.Key})
+	}
+
+	// ── S3 / Backblaze path ───────────────────────────────────────────────────
 	if !strings.HasPrefix(req.Key, projectID+"/") {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": true, "message": "Key does not belong to this project"})
 	}
 
 	client, bucket, err := newS3Client()
 	if err != nil {
-		applogger.Error("DeleteFile: storage not configured or S3 init failed: %v", err)
+		applogger.Error("DeleteFile: %v", err)
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"error":   true,
 			"message": "Storage is not configured. Add BACKBLAZE_KEY_ID, BACKBLAZE_APPLICATION_KEY, BUCKET_NAME, and BUCKET_ENDPOINT to your .env",
