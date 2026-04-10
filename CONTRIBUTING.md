@@ -43,7 +43,7 @@ coco-golang/
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/lordace-coder/coco-golang.git
+git clone https://github.com/lordace-coder/coco-beta.git
 cd coco-golang
 cp .env.example .env   # edit with your DB URL and SECRET
 ```
@@ -116,7 +116,7 @@ No ticket numbers required. If a commit closes a GitHub issue, add `Closes #123`
 
 ## Pull requests
 
-1. Fork the repo and create a branch: `git checkout -b my-feature`
+1. Fork [github.com/lordace-coder/coco-beta](https://github.com/lordace-coder/coco-beta) and create a branch: `git checkout -b my-feature`
 2. Make your changes and test locally.
 3. If you added a new model, bump `schemaVersion` in `internal/database/connection.go`.
 4. If you changed the dashboard, include the rebuilt `internal/dashboardfs/dist/` files in your PR.

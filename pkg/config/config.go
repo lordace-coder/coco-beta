@@ -8,6 +8,48 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const envExample = `# ── Required ──────────────────────────────────────────────────────────────────
+DATABASE_URL=./cocobase.db        # SQLite file, or a PostgreSQL URL
+SECRET=change-me-to-a-long-random-string
+
+# ── Server ────────────────────────────────────────────────────────────────────
+PORT=3000
+ENVIRONMENT=production            # development | production
+
+# ── SMTP (optional — needed for email verification / password reset) ───────────
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USERNAME=you@example.com
+# SMTP_PASSWORD=your-app-password
+# SMTP_FROM=no-reply@yourapp.com
+# SMTP_FROM_NAME=My App
+# SMTP_SECURE=false               # true for SSL/port 465
+
+# ── File storage — Backblaze B2 / S3-compatible (optional) ───────────────────
+# BACKBLAZE_KEY_ID=
+# BACKBLAZE_APPLICATION_KEY=
+# BACKBLAZE_KEY_NAME=
+# BUCKET_NAME=
+# BUCKET_ENDPOINT=https://s3.us-west-004.backblazeb2.com
+
+# ── Redis (optional — for real-time features) ─────────────────────────────────
+# REDIS_URL=redis://localhost:6379
+
+# ── OAuth — social login (optional) ──────────────────────────────────────────
+# GOOGLE_CLIENT_ID=
+# GOOGLE_CLIENT_SECRET=
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+# APPLE_CLIENT_ID=
+# APPLE_TEAM_ID=
+# APPLE_KEY_ID=
+# APPLE_PRIVATE_KEY=
+
+# ── Rate limiting (optional, 0 = unlimited) ───────────────────────────────────
+# RATE_LIMIT_REQUESTS=100
+# RATE_LIMIT_WINDOW=60
+`
+
 type Config struct {
 	Port        string
 	Environment string
@@ -74,6 +116,12 @@ func LoadConfig() *Config {
 	}
 	if !loaded {
 		log.Println("No .env file found, using system environment variables")
+		// Write a .env.example if one doesn't exist yet, so the user knows what to configure
+		if _, err := os.Stat(".env.example"); os.IsNotExist(err) {
+			if err := os.WriteFile(".env.example", []byte(envExample), 0644); err == nil {
+				log.Println("📄 Created .env.example — copy it to .env and fill in your values")
+			}
+		}
 	}
 
 	config := &Config{

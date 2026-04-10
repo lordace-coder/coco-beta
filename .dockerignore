@@ -34,8 +34,11 @@
 
 # Build output
 **/bin
-**/dist
 **/build
+# Exclude dashboard source dist but keep embedded dist
+dashboard/dist
+# Keep internal/dashboardfs/dist — it's embedded into the binary
+!internal/dashboardfs/dist
 
 # Log files
 **/*.log
