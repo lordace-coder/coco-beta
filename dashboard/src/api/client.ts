@@ -67,6 +67,8 @@ export const collectionsApi = {
     api.post<Collection>(`/projects/${projectId}/collections`, { name }),
   get: (projectId: string, colId: string) =>
     api.get<Collection & { document_count: number }>(`/projects/${projectId}/collections/${colId}`),
+  update: (projectId: string, colId: string, data: CollectionUpdateRequest) =>
+    api.patch<Collection>(`/projects/${projectId}/collections/${colId}`, data),
   delete: (projectId: string, colId: string) =>
     api.delete(`/projects/${projectId}/collections/${colId}`),
   listDocuments: (projectId: string, colId: string, params?: { limit?: number; offset?: number; sort?: string; order?: string }) =>
@@ -134,12 +136,44 @@ export interface AppUser {
   created_at: string;
 }
 
+export interface CollectionPermissions {
+  create: string[];
+  read: string[];
+  update: string[];
+  delete: string[];
+}
+
+export interface CollectionWebhooks {
+  pre_save?: string;
+  post_save?: string;
+  pre_delete?: string;
+  post_delete?: string;
+}
+
+export interface CollectionSentinels {
+  list?: string;
+  view?: string;
+  create?: string;
+  update?: string;
+  delete?: string;
+}
+
+export interface CollectionUpdateRequest {
+  name?: string;
+  permissions?: CollectionPermissions;
+  webhooks?: CollectionWebhooks;
+  sentinels?: CollectionSentinels;
+}
+
 export interface Collection {
   id: string;
   name: string;
   project_id: string;
   created_at: string;
   document_count?: number;
+  permissions?: CollectionPermissions;
+  webhooks?: CollectionWebhooks;
+  sentinels?: CollectionSentinels;
 }
 
 export interface Document {

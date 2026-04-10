@@ -8,16 +8,38 @@ type CollectionPermissionsRequest struct {
 	Delete []string `json:"delete"`
 }
 
+// CollectionWebhooksRequest represents webhook URLs for a collection.
+type CollectionWebhooksRequest struct {
+	PreSave    string `json:"pre_save,omitempty"`
+	PostSave   string `json:"post_save,omitempty"`
+	PreDelete  string `json:"pre_delete,omitempty"`
+	PostDelete string `json:"post_delete,omitempty"`
+}
+
 // CollectionCreateRequest represents the request to create a collection
 type CollectionCreateRequest struct {
 	Name        string                        `json:"name" validate:"required"`
-	WebhookURL  *string                       `json:"webhook_url,omitempty"`
+	WebhookURL  *string                       `json:"webhook_url,omitempty"` // legacy, ignored if Webhooks set
+	Webhooks    *CollectionWebhooksRequest    `json:"webhooks,omitempty"`
 	Permissions *CollectionPermissionsRequest `json:"permissions,omitempty"`
+	Sentinels   *CollectionSentinelsRequest   `json:"sentinels,omitempty"`
+}
+
+// CollectionSentinelsRequest holds sentinel expressions per operation.
+type CollectionSentinelsRequest struct {
+	List   string `json:"list,omitempty"`
+	View   string `json:"view,omitempty"`
+	Create string `json:"create,omitempty"`
+	Update string `json:"update,omitempty"`
+	Delete string `json:"delete,omitempty"`
 }
 
 // CollectionUpdateRequest represents the request to update a collection
 type CollectionUpdateRequest struct {
-	Name *string `json:"name,omitempty"`
+	Name        *string                       `json:"name,omitempty"`
+	Webhooks    *CollectionWebhooksRequest    `json:"webhooks,omitempty"`
+	Permissions *CollectionPermissionsRequest `json:"permissions,omitempty"`
+	Sentinels   *CollectionSentinelsRequest   `json:"sentinels,omitempty"`
 }
 
 // DocumentCreateRequest represents the request to create a document
@@ -53,8 +75,10 @@ type CollectionResponse struct {
 	ID          string      `json:"id"`
 	Name        string      `json:"name"`
 	ProjectID   string      `json:"project_id"`
-	WebhookURL  *string     `json:"webhook_url,omitempty"`
+	WebhookURL  *string     `json:"webhook_url,omitempty"` // legacy
+	Webhooks    Webhooks    `json:"webhooks"`
 	Permissions Permissions `json:"permissions"`
+	Sentinels   Sentinels   `json:"sentinels"`
 	CreatedAt   string      `json:"created_at"`
 }
 

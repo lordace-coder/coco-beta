@@ -971,9 +971,8 @@ func ForgotPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create reset token"})
 	}
 
-	// Send reset email via SMTP (if configured). Soft-fails if SMTP not set up.
 	frontendURL := config.AppConfig.FrontendURL
-	go services.SendPasswordResetEmail(user.Email, token, frontendURL)
+	go services.SendPasswordResetEmail(project, user.Email, token, frontendURL)
 
 	return c.JSON(fiber.Map{
 		"message": "If that email exists, a reset link has been sent",
@@ -1187,8 +1186,14 @@ func issueEmailVerificationToken(c *fiber.Ctx, user *models.AppUser) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create verification token"})
 	}
 
-	// Send via SMTP if configured (soft-fails if not set up)
-	go services.SendVerificationEmail(user.Email, token, config.AppConfig.FrontendURL)
+	// Load project for per-project mailer config
+	var project models.Project
+	if err := database.DB.First(&project, "id = ?", user.ClientID).Error; err != nil {
+		// soft-fail — send without project context
+		go services.SendVerificationEmail(nil, user.Email, token, config.AppConfig.FrontendURL)
+	} else {
+		go services.SendVerificationEmail(&project, user.Email, token, config.AppConfig.FrontendURL)
+	}
 
 	return c.JSON(fiber.Map{
 		"message":          "Verification email sent successfully. Please check your inbox.",

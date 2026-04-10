@@ -126,11 +126,14 @@ No ticket numbers required. If a commit closes a GitHub issue, add `Closes #123`
 
 ## Reporting bugs
 
+When the server runs it writes a `cocobase.log` file next to the binary. Every 5xx error is logged there with the request path, status code, error message, and source file/line number. Please attach the relevant lines from `cocobase.log` when opening an issue — it makes it much easier to pinpoint the problem.
+
 Open a GitHub issue with:
 
 - What you were doing
 - What you expected to happen
 - What actually happened
+- The relevant lines from `cocobase.log`
 - Your OS, Go version, and database type (SQLite / PostgreSQL)
 
 ---

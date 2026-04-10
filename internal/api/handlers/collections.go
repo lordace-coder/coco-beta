@@ -57,6 +57,16 @@ func CreateCollection(c *fiber.Ctx) error {
 		WebhookURL: req.WebhookURL,
 	}
 
+	// Set webhooks
+	if req.Webhooks != nil {
+		collection.Webhooks = models.Webhooks{
+			PreSave:    req.Webhooks.PreSave,
+			PostSave:   req.Webhooks.PostSave,
+			PreDelete:  req.Webhooks.PreDelete,
+			PostDelete: req.Webhooks.PostDelete,
+		}
+	}
+
 	// Set permissions
 	if req.Permissions != nil {
 		collection.Permissions = models.Permissions{
@@ -64,6 +74,17 @@ func CreateCollection(c *fiber.Ctx) error {
 			Read:   req.Permissions.Read,
 			Update: req.Permissions.Update,
 			Delete: req.Permissions.Delete,
+		}
+	}
+
+	// Set sentinels
+	if req.Sentinels != nil {
+		collection.Sentinels = models.Sentinels{
+			List:   req.Sentinels.List,
+			View:   req.Sentinels.View,
+			Create: req.Sentinels.Create,
+			Update: req.Sentinels.Update,
+			Delete: req.Sentinels.Delete,
 		}
 	}
 
@@ -175,6 +196,37 @@ func UpdateCollection(c *fiber.Ctx) error {
 		collection.Name = *req.Name
 	}
 
+	// Update webhooks if provided
+	if req.Webhooks != nil {
+		collection.Webhooks = models.Webhooks{
+			PreSave:    req.Webhooks.PreSave,
+			PostSave:   req.Webhooks.PostSave,
+			PreDelete:  req.Webhooks.PreDelete,
+			PostDelete: req.Webhooks.PostDelete,
+		}
+	}
+
+	// Update permissions if provided
+	if req.Permissions != nil {
+		collection.Permissions = models.Permissions{
+			Create: req.Permissions.Create,
+			Read:   req.Permissions.Read,
+			Update: req.Permissions.Update,
+			Delete: req.Permissions.Delete,
+		}
+	}
+
+	// Update sentinels if provided
+	if req.Sentinels != nil {
+		collection.Sentinels = models.Sentinels{
+			List:   req.Sentinels.List,
+			View:   req.Sentinels.View,
+			Create: req.Sentinels.Create,
+			Update: req.Sentinels.Update,
+			Delete: req.Sentinels.Delete,
+		}
+	}
+
 	if err := database.DB.Save(collection).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   true,
@@ -267,7 +319,9 @@ func toCollectionResponse(collection *models.Collection) models.CollectionRespon
 		Name:        collection.Name,
 		ProjectID:   collection.ProjectID,
 		WebhookURL:  collection.WebhookURL,
+		Webhooks:    collection.Webhooks,
 		Permissions: collection.Permissions,
+		Sentinels:   collection.Sentinels,
 		CreatedAt:   collection.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
 }

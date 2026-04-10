@@ -83,7 +83,87 @@ func GetCollection(c *fiber.Ctx) error {
 		"name":           col.Name,
 		"project_id":     col.ProjectID,
 		"created_at":     col.CreatedAt,
+		"permissions":    col.Permissions,
+		"webhooks":       col.Webhooks,
 		"document_count": docCount,
+	})
+}
+
+// UpdateCollection handles PATCH /_/api/projects/:id/collections/:colId
+func UpdateCollection(c *fiber.Ctx) error {
+	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
+	}
+
+	var req struct {
+		Name        *string `json:"name,omitempty"`
+		Permissions *struct {
+			Create []string `json:"create"`
+			Read   []string `json:"read"`
+			Update []string `json:"update"`
+			Delete []string `json:"delete"`
+		} `json:"permissions,omitempty"`
+		Webhooks *struct {
+			PreSave    string `json:"pre_save"`
+			PostSave   string `json:"post_save"`
+			PreDelete  string `json:"pre_delete"`
+			PostDelete string `json:"post_delete"`
+		} `json:"webhooks,omitempty"`
+		Sentinels *struct {
+			List   string `json:"list"`
+			View   string `json:"view"`
+			Create string `json:"create"`
+			Update string `json:"update"`
+			Delete string `json:"delete"`
+		} `json:"sentinels,omitempty"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+	}
+
+	if req.Name != nil && *req.Name != "" {
+		col.Name = *req.Name
+	}
+	if req.Permissions != nil {
+		col.Permissions = models.Permissions{
+			Create: req.Permissions.Create,
+			Read:   req.Permissions.Read,
+			Update: req.Permissions.Update,
+			Delete: req.Permissions.Delete,
+		}
+	}
+	if req.Webhooks != nil {
+		col.Webhooks = models.Webhooks{
+			PreSave:    req.Webhooks.PreSave,
+			PostSave:   req.Webhooks.PostSave,
+			PreDelete:  req.Webhooks.PreDelete,
+			PostDelete: req.Webhooks.PostDelete,
+		}
+	}
+	if req.Sentinels != nil {
+		col.Sentinels = models.Sentinels{
+			List:   req.Sentinels.List,
+			View:   req.Sentinels.View,
+			Create: req.Sentinels.Create,
+			Update: req.Sentinels.Update,
+			Delete: req.Sentinels.Delete,
+		}
+	}
+
+	if err := database.DB.Save(col).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update collection"})
+	}
+
+	Log(c.Params("id"), "update_collection", "collection", col.ID, col.Name)
+	return c.JSON(fiber.Map{
+		"id":          col.ID,
+		"name":        col.Name,
+		"project_id":  col.ProjectID,
+		"created_at":  col.CreatedAt,
+		"permissions": col.Permissions,
+		"webhooks":    col.Webhooks,
+		"sentinels":   col.Sentinels,
 	})
 }
 

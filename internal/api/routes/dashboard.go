@@ -58,6 +58,7 @@ func SetupDashboardRoutes(app *fiber.App) {
 	projects.Get("/:id/collections", dashboard.ListCollections)
 	projects.Post("/:id/collections", dashboard.CreateCollection)
 	projects.Get("/:id/collections/:colId", dashboard.GetCollection)
+	projects.Patch("/:id/collections/:colId", dashboard.UpdateCollection)
 	projects.Delete("/:id/collections/:colId", dashboard.DeleteCollection)
 
 	// Project → collection documents

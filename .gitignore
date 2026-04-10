@@ -43,6 +43,7 @@ dashboard/.env
 
 # Log files
 *.log
+cocobase.log
 
 # Temporary files
 tmp/

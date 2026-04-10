@@ -23,6 +23,17 @@ export function ConfigTab({ project }: { project: Project }) {
     ALLOWED_SELF_ROLES: Array.isArray(cfg.ALLOWED_SELF_ROLES)
       ? (cfg.ALLOWED_SELF_ROLES as string[]).join(", ")
       : String(cfg.ALLOWED_SELF_ROLES ?? ""),
+    // SMTP
+    smtp_host: String(cfg.smtp_host ?? ""),
+    smtp_port: String(cfg.smtp_port ?? ""),
+    smtp_username: String(cfg.smtp_username ?? ""),
+    smtp_password: String(cfg.smtp_password ?? ""),
+    smtp_from: String(cfg.smtp_from ?? ""),
+    smtp_from_name: String(cfg.smtp_from_name ?? ""),
+    smtp_secure: String(cfg.smtp_secure ?? "false"),
+    // Resend
+    resend_api_key: String(cfg.resend_api_key ?? ""),
+    resend_from: String(cfg.resend_from ?? ""),
   });
 
   const [origins, setOrigins] = useState<string[]>(project.allowed_origins ?? []);
@@ -55,6 +66,17 @@ export function ConfigTab({ project }: { project: Project }) {
     if (form.ALLOWED_SELF_ROLES.trim()) {
       configs.ALLOWED_SELF_ROLES = form.ALLOWED_SELF_ROLES.split(",").map((s) => s.trim()).filter(Boolean);
     }
+    // SMTP
+    if (form.smtp_host) configs.smtp_host = form.smtp_host;
+    if (form.smtp_port) configs.smtp_port = form.smtp_port;
+    if (form.smtp_username) configs.smtp_username = form.smtp_username;
+    if (form.smtp_password) configs.smtp_password = form.smtp_password;
+    if (form.smtp_from) configs.smtp_from = form.smtp_from;
+    if (form.smtp_from_name) configs.smtp_from_name = form.smtp_from_name;
+    configs.smtp_secure = form.smtp_secure === "true";
+    // Resend
+    if (form.resend_api_key) configs.resend_api_key = form.resend_api_key;
+    if (form.resend_from) configs.resend_from = form.resend_from;
     updateMutation.mutate({ configs, allowed_origins: origins });
   }
 
@@ -138,6 +160,60 @@ export function ConfigTab({ project }: { project: Project }) {
         </div>
       </Section>
 
+      {/* Mailer */}
+      <Section title="Email / Mailer" desc="Configure how this project sends emails. Resend takes priority over SMTP if both are set.">
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground bg-muted rounded-md px-3 py-2">
+            Leave fields empty to fall back to global .env SMTP settings. Set a Resend API key to use Resend instead of SMTP.
+          </p>
+
+          <div>
+            <h4 className="text-sm font-semibold mb-3">Resend (recommended)</h4>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField label="Resend API key" desc="Get from resend.com. Overrides SMTP if set." type="password"
+                placeholder="re_..." value={form.resend_api_key}
+                onChange={(v) => setForm((f) => ({ ...f, resend_api_key: v }))} />
+              <TextField label="From address" desc='e.g. "Acme <hello@acme.com>"' type="text"
+                placeholder="noreply@yourdomain.com" value={form.resend_from}
+                onChange={(v) => setForm((f) => ({ ...f, resend_from: v }))} />
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold mb-3">SMTP</h4>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField label="SMTP host" desc="e.g. smtp.sendgrid.net" type="text"
+                placeholder="smtp.example.com" value={form.smtp_host}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_host: v }))} />
+              <TextField label="SMTP port" desc="Usually 587 (TLS) or 465 (SSL)." type="number"
+                placeholder="587" value={form.smtp_port}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_port: v }))} />
+              <TextField label="SMTP username" desc="Usually your email address." type="text"
+                placeholder="user@example.com" value={form.smtp_username}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_username: v }))} />
+              <TextField label="SMTP password" desc="Your SMTP password or app password." type="password"
+                placeholder="••••••••" value={form.smtp_password}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_password: v }))} />
+              <TextField label="From address" desc="Envelope from address." type="text"
+                placeholder="noreply@yourdomain.com" value={form.smtp_from}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_from: v }))} />
+              <TextField label="From name" desc="Display name shown in email clients." type="text"
+                placeholder="My App" value={form.smtp_from_name}
+                onChange={(v) => setForm((f) => ({ ...f, smtp_from_name: v }))} />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium mb-1">TLS / SSL</label>
+              <p className="text-xs text-muted-foreground mb-1.5">Enable for port 465 (SSL). Leave off for port 587 (STARTTLS).</p>
+              <select value={form.smtp_secure} onChange={(e) => setForm((f) => ({ ...f, smtp_secure: e.target.value }))}
+                className="rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring">
+                <option value="false">Off (STARTTLS / port 587)</option>
+                <option value="true">On (SSL / port 465)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       <div className="flex items-center gap-3">
         <button type="submit" disabled={updateMutation.isPending}
           className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 hover:opacity-90">
@@ -185,6 +261,17 @@ function URLField({ label, desc, placeholder, value, onChange }: { label: string
       <label className="block text-sm font-medium mb-1">{label}</label>
       <p className="text-xs text-muted-foreground mb-1.5">{desc}</p>
       <input type="url" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
+    </div>
+  );
+}
+
+function TextField({ label, desc, placeholder, value, onChange, type = "text" }: { label: string; desc: string; placeholder: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <p className="text-xs text-muted-foreground mb-1.5">{desc}</p>
+      <input type={type} placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" />
     </div>
   );

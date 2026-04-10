@@ -9,6 +9,7 @@ const navItems = [
   { label: "Projects", href: "/projects" },
   { label: "Settings", href: "/settings" },
   { label: "Environment", href: "/env-setup" },
+  { label: "Sentinels", href: "/sentinels" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

@@ -14,6 +14,25 @@ import (
 	"github.com/patrick/cocobase/internal/services"
 )
 
+// checkSentinel evaluates a sentinel expression for the current request/doc.
+// Returns a 403 Fiber error if denied, or nil if access is granted.
+func checkSentinel(c *fiber.Ctx, expr string, user *models.AppUser, doc map[string]interface{}) error {
+	if expr == "" {
+		return nil
+	}
+	ctx := services.SentinelContext{
+		User:   user,
+		Doc:    doc,
+		IP:     c.IP(),
+		Method: c.Method(),
+	}
+	granted, err := services.EvalSentinel(expr, ctx)
+	if err != nil || !granted {
+		return fiber.NewError(fiber.StatusForbidden, "Access denied by sentinel rule")
+	}
+	return nil
+}
+
 // TODO: Invalidate collectionCache after collection renames/deletes from dashboard
 
 var (
@@ -71,10 +90,21 @@ func CreateDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Document data is required"})
 	}
 
+	// Sentinel check for create
+	if err := checkSentinel(c, collection.Sentinels.Create, appUser, req.Data); err != nil {
+		return err
+	}
+
+	// pre_save webhook (fire-and-forget — does not block create)
+	services.FireWebhook(collection.Webhooks.PreSave, "pre_save", collection.ID, "", req.Data)
+
 	document := models.Document{CollectionID: collection.ID, Data: req.Data}
 	if err := database.DB.Create(&document).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create document"})
 	}
+
+	// post_save webhook
+	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	go BroadcastDocumentChange(collection.ID, "created", &document, project.ID)
 	return c.Status(fiber.StatusCreated).JSON(toDocumentResponse(&document))
@@ -230,9 +260,17 @@ func ListDocuments(c *fiber.Ctx) error {
 	}
 
 	// ── 8. Convert to maps ───────────────────────────────────────────────
-	results := make([]map[string]interface{}, len(documents))
+	results := make([]map[string]interface{}, 0, len(documents))
 	for i := range documents {
-		results[i] = documentToMap(&documents[i])
+		m := documentToMap(&documents[i])
+		// ── Sentinel filter for list ─────────────────────────────────────
+		if collection.Sentinels.List != "" {
+			ok, _ := services.EvalSentinel(collection.Sentinels.List, services.SentinelContext{User: appUser, Doc: m, IP: c.IP(), Method: c.Method()})
+			if !ok {
+				continue // exclude this document from results
+			}
+		}
+		results = append(results, m)
 	}
 
 	// ── 9. Populate / select ─────────────────────────────────────────────
@@ -286,6 +324,11 @@ func GetDocument(c *fiber.Ctx) error {
 	if err := database.DB.Where("id = ? AND collection_id = ?", documentID, collection.ID).
 		First(&document).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Document not found"})
+	}
+
+	// Sentinel check for view
+	if err := checkSentinel(c, collection.Sentinels.View, appUser, map[string]interface{}(document.Data)); err != nil {
+		return err
 	}
 
 	populate := c.Query("populate")
@@ -349,6 +392,11 @@ func UpdateDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Document not found"})
 	}
 
+	// Sentinel check for update (evaluated on existing data)
+	if err := checkSentinel(c, collection.Sentinels.Update, appUser, map[string]interface{}(document.Data)); err != nil {
+		return err
+	}
+
 	var req struct {
 		models.DocumentUpdateRequest
 		Override bool `json:"override"` // if true, Data fully replaces existing data
@@ -367,9 +415,15 @@ func UpdateDocument(c *fiber.Ctx) error {
 		}
 	}
 
+	// pre_save webhook
+	services.FireWebhook(collection.Webhooks.PreSave, "pre_save", collection.ID, document.ID, map[string]interface{}(document.Data))
+
 	if err := database.DB.Save(&document).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update document"})
 	}
+
+	// post_save webhook
+	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	go BroadcastDocumentChange(collection.ID, "updated", &document, project.ID)
 
@@ -413,6 +467,14 @@ func DeleteDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Document not found"})
 	}
 
+	// Sentinel check for delete
+	if err := checkSentinel(c, collection.Sentinels.Delete, appUser, map[string]interface{}(document.Data)); err != nil {
+		return err
+	}
+
+	// pre_delete webhook
+	services.FireWebhook(collection.Webhooks.PreDelete, "pre_delete", collection.ID, document.ID, map[string]interface{}(document.Data))
+
 	if err := database.DB.Delete(&document).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete document"})
 	}
@@ -420,6 +482,9 @@ func DeleteDocument(c *fiber.Ctx) error {
 	// Evict cache on delete
 	cacheKey := fmt.Sprintf("col:%s:%s", project.ID, collectionID)
 	collectionCache.Delete(cacheKey)
+
+	// post_delete webhook
+	services.FireWebhook(collection.Webhooks.PostDelete, "post_delete", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	go BroadcastDocumentChange(collection.ID, "deleted", &document, project.ID)
 

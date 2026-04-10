@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,11 +10,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gofiber/fiber/v2"
+	applogger "github.com/patrick/cocobase/pkg/logger"
 	"github.com/patrick/cocobase/pkg/config"
 )
 
 // ListFiles handles GET /_/api/projects/:id/files
-// Lists files stored in B2/S3 under the project's prefix.
 func ListFiles(c *fiber.Ctx) error {
 	projectID := c.Params("id")
 	if _, err := getProjectByID(projectID); err != nil {
@@ -29,7 +30,11 @@ func ListFiles(c *fiber.Ctx) error {
 
 	client, bucket, err := newS3Client()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Storage not configured"})
+		applogger.Error("ListFiles: storage not configured or S3 init failed: %v", err)
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":   true,
+			"message": "Storage is not configured. Add BACKBLAZE_KEY_ID, BACKBLAZE_APPLICATION_KEY, BUCKET_NAME, and BUCKET_ENDPOINT to your .env",
+		})
 	}
 
 	out, err := client.ListObjectsV2(&s3.ListObjectsV2Input{
@@ -37,7 +42,8 @@ func ListFiles(c *fiber.Ctx) error {
 		Prefix: aws.String(prefix),
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to list files"})
+		applogger.Error("ListFiles: S3 ListObjectsV2 failed: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": fmt.Sprintf("Failed to list files: %v", err)})
 	}
 
 	type fileEntry struct {
@@ -59,14 +65,10 @@ func ListFiles(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{
-		"data":  files,
-		"total": len(files),
-	})
+	return c.JSON(fiber.Map{"data": files, "total": len(files)})
 }
 
 // DeleteFile handles DELETE /_/api/projects/:id/files
-// Body: {"key": "projectID/filename.ext"}
 func DeleteFile(c *fiber.Ctx) error {
 	projectID := c.Params("id")
 	if _, err := getProjectByID(projectID); err != nil {
@@ -80,14 +82,17 @@ func DeleteFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "key is required"})
 	}
 
-	// Ensure the key belongs to this project
 	if !strings.HasPrefix(req.Key, projectID+"/") {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": true, "message": "Key does not belong to this project"})
 	}
 
 	client, bucket, err := newS3Client()
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Storage not configured"})
+		applogger.Error("DeleteFile: storage not configured or S3 init failed: %v", err)
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":   true,
+			"message": "Storage is not configured. Add BACKBLAZE_KEY_ID, BACKBLAZE_APPLICATION_KEY, BUCKET_NAME, and BUCKET_ENDPOINT to your .env",
+		})
 	}
 
 	_, err = client.DeleteObject(&s3.DeleteObjectInput{
@@ -95,7 +100,8 @@ func DeleteFile(c *fiber.Ctx) error {
 		Key:    aws.String(req.Key),
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete file"})
+		applogger.Error("DeleteFile: S3 DeleteObject failed for key %s: %v", req.Key, err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": fmt.Sprintf("Failed to delete file: %v", err)})
 	}
 
 	return c.JSON(fiber.Map{"message": "File deleted", "key": req.Key})
@@ -104,7 +110,7 @@ func DeleteFile(c *fiber.Ctx) error {
 func newS3Client() (*s3.S3, string, error) {
 	cfg := config.AppConfig
 	if cfg == nil || cfg.BucketEndpoint == "" || cfg.BackblazeKeyID == "" {
-		return nil, "", fiber.ErrInternalServerError
+		return nil, "", fmt.Errorf("storage environment variables not set (BACKBLAZE_KEY_ID, BUCKET_ENDPOINT)")
 	}
 
 	sess, err := session.NewSession(&aws.Config{
@@ -123,6 +129,5 @@ func buildFileURL(cfg *config.Config, key string) string {
 	if cfg.BucketName == "" {
 		return ""
 	}
-	// Use the standard Backblaze public URL format
 	return "https://f005.backblazeb2.com/file/" + cfg.BucketName + "/" + key
 }

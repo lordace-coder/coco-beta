@@ -74,7 +74,7 @@ func Connect(databaseURL string, debug bool) error {
 }
 
 // schemaVersion is the current schema version. Bump this whenever you add new models or columns.
-const schemaVersion = 2
+const schemaVersion = 5
 
 type schemaVersionRow struct {
 	Version int `gorm:"primaryKey"`
