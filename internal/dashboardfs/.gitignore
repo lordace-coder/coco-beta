@@ -1,0 +1,4 @@
+# Un-ignore the embedded dist so Go's embed directive can find it.
+# The root .gitignore has a broad `dist/` rule; this overrides it for this package.
+!dist/
+!dist/**

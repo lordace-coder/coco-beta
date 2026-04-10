@@ -39,8 +39,8 @@ func SetupCollectionRoutes(app *fiber.App) {
 	// Document routes (MUST come before /:id)
 	documents := app.Group("/collections/:id/documents", middleware.RequireAPIKey)
 	{
-		// CRUD operations
-		documents.Post("/upload", handlers.CreateDocumentWithFile)
+		// CRUD — multipart/form-data is detected inside each handler (matches Python behaviour)
+		documents.Post("/", handlers.CreateDocument)
 		documents.Get("/", handlers.ListDocuments)
 		documents.Get("/:docId", handlers.GetDocument)
 		documents.Patch("/:docId", handlers.UpdateDocument)
@@ -57,17 +57,19 @@ func SetupCollectionRoutes(app *fiber.App) {
 
 	advancedDocumentRoutes := app.Group("/collections/:id/query/documents", middleware.RequireAPIKey)
 	{
-		// Advanced query routes (MUST come before /:docId to avoid route conflicts)
+		// Advanced query routes
 		advancedDocumentRoutes.Get("/count", handlers.CountDocuments)
 		advancedDocumentRoutes.Get("/aggregate", handlers.AggregateDocuments)
 		advancedDocumentRoutes.Get("/group-by", handlers.GroupByField)
 		advancedDocumentRoutes.Get("/schema", handlers.GetCollectionSchema)
 		advancedDocumentRoutes.Get("/export", handlers.ExportCollection)
+	}
 
-		// Batch operations
-		advancedDocumentRoutes.Post("/batch-create", handlers.BatchCreateDocuments)
-		advancedDocumentRoutes.Post("/batch-update", handlers.BatchUpdateDocuments)
-		advancedDocumentRoutes.Post("/batch-delete", handlers.BatchDeleteDocuments)
-
+	// Batch operations — match Python API paths: /collections/{id}/batch/documents/{action}
+	batchRoutes := app.Group("/collections/:id/batch/documents", middleware.RequireAPIKey)
+	{
+		batchRoutes.Post("/create", handlers.BatchCreateDocuments)
+		batchRoutes.Post("/update", handlers.BatchUpdateDocuments)
+		batchRoutes.Post("/delete", handlers.BatchDeleteDocuments)
 	}
 }

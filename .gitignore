@@ -33,8 +33,12 @@ Thumbs.db
 
 # Build output
 bin/
-dist/
 build/
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env
 
 # Log files
 *.log

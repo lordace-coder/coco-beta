@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/patrick/cocobase/internal/api/handlers"
+	dashhandlers "github.com/patrick/cocobase/internal/api/handlers/dashboard"
 	"github.com/patrick/cocobase/internal/api/middleware"
 	"github.com/patrick/cocobase/internal/api/routes"
 	"github.com/patrick/cocobase/internal/database"
@@ -62,6 +63,14 @@ func main() {
 
 		// Initialize handler services after database connection
 		handlers.InitHandlerServices()
+
+		// Auto-migrate dashboard models
+		if err := database.Migrate(); err != nil {
+			log.Printf("⚠️  Database migration warning: %v", err)
+		}
+
+		// Apply dashboard config overrides (SMTP, etc.) from DB over .env
+		dashhandlers.LoadDashboardConfigIntoAppConfig()
 	} else {
 		log.Println("⚠️  No DATABASE_URL provided, running without database connection")
 	}
@@ -93,6 +102,9 @@ func main() {
 
 	// Setup routes
 	routes.SetupRoutes(app)
+
+	// Setup admin dashboard routes
+	routes.SetupDashboardRoutes(app)
 
 	// Swagger documentation
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)

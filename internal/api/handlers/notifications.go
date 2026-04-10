@@ -361,6 +361,36 @@ func ChannelNotificationWebSocket(c *websocket.Conn) {
 	}
 }
 
+// ListBroadcastRooms returns active broadcast rooms for the project
+// @Summary List active broadcast rooms
+// @Tags Realtime
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security ApiKeyAuth
+// @Router /realtime/rooms [get]
+func ListBroadcastRooms(c *fiber.Ctx) error {
+	manager := GetNotificationManager()
+	manager.mu.RLock()
+	defer manager.mu.RUnlock()
+
+	type RoomInfo struct {
+		RoomID      string `json:"room_id"`
+		Connections int    `json:"connections"`
+	}
+
+	rooms := []RoomInfo{}
+	for channel, conns := range manager.channelConns {
+		if len(conns) > 0 {
+			rooms = append(rooms, RoomInfo{RoomID: channel, Connections: len(conns)})
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"rooms": rooms,
+		"total": len(rooms),
+	})
+}
+
 // GetNotificationStats returns notification statistics
 // @Summary Get notification statistics
 // @Description Get statistics about active notification connections

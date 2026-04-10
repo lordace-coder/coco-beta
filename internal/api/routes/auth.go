@@ -8,25 +8,36 @@ import (
 
 // SetupAuthRoutes sets up all authentication routes for app users
 func SetupAuthRoutes(app *fiber.App) {
-	// Auth routes with API key authentication (matching Python API structure)
 	auth := app.Group("/auth-collections", middleware.RequireAPIKey)
 
-	// Public auth endpoints (require API key only)
+	// Basic auth
 	auth.Post("/login", handlers.UserLogin)
 	auth.Post("/signup", handlers.UserSignup)
 
-	// Google OAuth - Method 1: Redirect flow
+	// OAuth - social login (verify tokens obtained by client)
+	auth.Post("/google-verify", handlers.VerifyGoogleToken)
+	auth.Post("/github-verify", handlers.VerifyGitHubToken)
+	auth.Post("/apple-verify", handlers.VerifyAppleToken)
+
+	// Google redirect-based flow (optional)
 	auth.Get("/login-google", handlers.LoginWithGoogle)
 
-	// Google OAuth - Method 2: Frontend token verification
-	auth.Post("/verify-google-token", handlers.VerifyGoogleToken)
-
-	// User management endpoints (require API key)
+	// User management
 	auth.Get("/users", handlers.ListAllUsers)
 	auth.Get("/users/:id", handlers.GetUserByID)
 
-	// Protected endpoints (require valid JWT token in Authorization header)
-	auth.Get("/user", middleware.RequireAppUser, handlers.GetCurrentUser)
-	auth.Patch("/user", middleware.RequireAppUser, handlers.UpdateCurrentUser)
+	// Password reset (no JWT needed, uses reset token)
+	auth.Get("/reset-password-page", handlers.ResetPasswordPage)
+	auth.Post("/forgot-password", handlers.ForgotPassword)
+	auth.Post("/reset-password", handlers.ResetPassword)
 
+	// Protected endpoints (require valid JWT)
+	authJWT := app.Group("/auth-collections", middleware.RequireAPIKey, middleware.RequireAppUser)
+	authJWT.Get("/user", handlers.GetCurrentUser)
+	authJWT.Patch("/user", handlers.UpdateCurrentUser)
+
+	// Email verification (send/resend require JWT; verify uses token only)
+	authJWT.Post("/verify-email/send", handlers.SendVerificationEmail)
+	authJWT.Post("/verify-email/resend", handlers.ResendVerificationEmail)
+	auth.Post("/verify-email/verify", handlers.VerifyEmail)
 }

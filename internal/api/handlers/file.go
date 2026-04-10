@@ -78,13 +78,6 @@ func UploadFile(c *fiber.Ctx) error {
 	ctx := context.Background()
 	result, err := services.UploadFile(ctx, fileContent, project.ID, newFilename, subdirectory)
 	if err != nil {
-		// Check if it's a storage limit error
-		if err.Error()[:14] == "storage limit" {
-			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{
-				"error":   true,
-				"message": err.Error(),
-			})
-		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   true,
 			"message": fmt.Sprintf("Failed to upload file: %v", err),
@@ -133,22 +126,12 @@ func ListFiles(c *fiber.Ctx) error {
 
 	// Get storage usage
 	usage, _ := services.GetProjectStorageUsage(project.ID)
-	plan := services.GetCurrentPlan(project)
-
-	var storageLimitBytes int64
-	var limitMB *int
-	if plan.MaxStorageMB != nil {
-		storageLimitBytes = int64(*plan.MaxStorageMB) * 1024 * 1024
-		limitMB = plan.MaxStorageMB
-	}
 
 	return c.JSON(fiber.Map{
 		"files":         files,
 		"total_files":   len(files),
 		"storage_usage": usage,
-		"storage_limit": storageLimitBytes, // 0 if unlimited
 		"usage_mb":      float64(usage) / 1024 / 1024,
-		"limit_mb":      limitMB, // nil if unlimited
 	})
 }
 

@@ -41,7 +41,52 @@ var reservedParams = []string{
 // @Success 200 {object} models.DocumentResponse
 // @Security ApiKeyAuth
 // @Router /collections/documents [post]
+// CreateDocument handles POST /collections/:id/documents (JSON or multipart)
+func CreateDocument(c *fiber.Ctx) error {
+	if strings.Contains(c.Get("Content-Type"), "multipart/form-data") {
+		return CreateDocumentWithFile(c)
+	}
+
+	project := middleware.GetProject(c)
+	if project == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
+	}
+
+	collectionID := c.Params("id")
+	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
+	}
+
+	appUser := middleware.GetAppUserFromContext(c)
+	if err := permChecker.CanAccessCollection(collection, services.PermissionCreate, appUser); err != nil {
+		return err
+	}
+
+	var req models.DocumentCreateRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+	}
+	if len(req.Data) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Document data is required"})
+	}
+
+	document := models.Document{CollectionID: collection.ID, Data: req.Data}
+	if err := database.DB.Create(&document).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create document"})
+	}
+
+	go BroadcastDocumentChange(collection.ID, "created", &document, project.ID)
+	return c.Status(fiber.StatusCreated).JSON(toDocumentResponse(&document))
+}
+
+// CreateDocumentLegacy handles POST /collections/documents?collection=name (legacy query-param style)
 func CreateDocumentLegacy(c *fiber.Ctx) error {
+	// Detect multipart — delegate to file handler (same as Python)
+	if strings.Contains(c.Get("Content-Type"), "multipart/form-data") {
+		return CreateDocumentWithFile(c)
+	}
+
 	project := middleware.GetProject(c)
 	if project == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
@@ -275,6 +320,11 @@ func GetDocument(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/{docId} [patch]
 func UpdateDocument(c *fiber.Ctx) error {
+	// Detect multipart — delegate to file handler (same as Python)
+	if strings.Contains(c.Get("Content-Type"), "multipart/form-data") {
+		return UpdateDocumentWithFile(c)
+	}
+
 	project := middleware.GetProject(c)
 	if project == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
@@ -299,14 +349,21 @@ func UpdateDocument(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Document not found"})
 	}
 
-	var req models.DocumentUpdateRequest
+	var req struct {
+		models.DocumentUpdateRequest
+		Override bool `json:"override"` // if true, Data fully replaces existing data
+	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
 	}
 
 	if req.Data != nil {
-		for key, value := range req.Data {
-			document.Data[key] = value
+		if req.Override {
+			document.Data = req.Data
+		} else {
+			for key, value := range req.Data {
+				document.Data[key] = value
+			}
 		}
 	}
 

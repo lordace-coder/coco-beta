@@ -12,8 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/patrick/cocobase/internal/database"
-	"github.com/patrick/cocobase/internal/models"
 	"github.com/patrick/cocobase/pkg/config"
 )
 
@@ -75,49 +73,6 @@ func GetProjectStorageUsage(projectID string) (int64, error) {
 	return totalSize, nil
 }
 
-// CheckStorageLimit checks if uploading a file would exceed storage limit
-func CheckStorageLimit(projectID string, fileSize int64) error {
-	// Get project's current plan
-	var project models.Project
-	if err := database.DB.Where("id = ?", projectID).First(&project).Error; err != nil {
-		return fmt.Errorf("project not found: %w", err)
-	}
-
-	plan := GetCurrentPlan(&project)
-
-	// Check if storage is unlimited (nil or 0)
-	if plan.MaxStorageMB == nil || *plan.MaxStorageMB == 0 {
-		return nil // Unlimited storage
-	}
-
-	storageLimitBytes := int64(*plan.MaxStorageMB) * 1024 * 1024
-
-	// Get current usage
-	currentUsage, err := GetProjectStorageUsage(projectID)
-	if err != nil {
-		return fmt.Errorf("failed to check storage usage: %w", err)
-	}
-
-	// Check if adding this file would exceed limit
-	if currentUsage+fileSize > storageLimitBytes {
-		// Send notification in background
-		go func() {
-			// TODO: Implement notification
-			log.Printf("⚠️ Storage limit reached for project %s: %d/%d MB",
-				projectID, currentUsage/1024/1024, plan.MaxStorageMB)
-		}()
-
-		return fmt.Errorf(
-			"storage limit exceeded. Current: %.2f MB, Limit: %d MB, File: %.2f MB",
-			float64(currentUsage)/1024/1024,
-			plan.MaxStorageMB,
-			float64(fileSize)/1024/1024,
-		)
-	}
-
-	return nil
-}
-
 // FileUploadResult contains the result of a file upload
 type FileUploadResult struct {
 	Filename     string    `json:"filename"`
@@ -131,11 +86,6 @@ type FileUploadResult struct {
 func UploadFile(ctx context.Context, fileContent []byte, projectID, filename, subdirectory string) (*FileUploadResult, error) {
 	if s3Client == nil {
 		return nil, fmt.Errorf("S3 client not initialized")
-	}
-
-	// Check storage limit before upload
-	if err := CheckStorageLimit(projectID, int64(len(fileContent))); err != nil {
-		return nil, err
 	}
 
 	// Construct S3 key

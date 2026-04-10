@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/patrick/cocobase/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -55,6 +56,14 @@ func Connect(databaseURL string, debug bool) error {
 
 	log.Println("✅ Database connection established")
 	return nil
+}
+
+// Migrate runs auto-migration for all models.
+func Migrate() error {
+	return DB.AutoMigrate(
+		&models.AdminUser{},
+		&models.DashboardConfig{},
+	)
 }
 
 // Close closes the database connection
