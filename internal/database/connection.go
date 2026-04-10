@@ -3,10 +3,12 @@ package database
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/patrick/cocobase/internal/models"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -23,20 +25,28 @@ func Connect(databaseURL string, debug bool) error {
 		logLevel = logger.Info
 	}
 
-	// Connect to PostgreSQL with performance optimizations
-	DB, err = gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
-
-		// Performance optimizations
-		DisableAutomaticPing:   false,
-		SkipDefaultTransaction: true, // Don't wrap every operation in a transaction
-		PrepareStmt:            true, // Cache prepared statements
-
-		// Connection pooling
+	gormCfg := &gorm.Config{
+		Logger:               logger.Default.LogMode(logLevel),
+		DisableAutomaticPing: false,
+		SkipDefaultTransaction: true,
+		PrepareStmt:          true,
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
-	})
+	}
+
+	isSQLite := strings.HasPrefix(databaseURL, "sqlite://") ||
+		strings.HasSuffix(databaseURL, ".db") ||
+		strings.HasSuffix(databaseURL, ".sqlite") ||
+		strings.HasSuffix(databaseURL, ".sqlite3")
+
+	if isSQLite {
+		// Strip sqlite:// prefix if present
+		filePath := strings.TrimPrefix(databaseURL, "sqlite://")
+		DB, err = gorm.Open(sqlite.Open(filePath), gormCfg)
+	} else {
+		DB, err = gorm.Open(postgres.Open(databaseURL), gormCfg)
+	}
 
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -48,22 +58,81 @@ func Connect(databaseURL string, debug bool) error {
 		return fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// Set connection pool settings for optimal performance
-	sqlDB.SetMaxIdleConns(25)                  // Idle connections ready for reuse
-	sqlDB.SetMaxOpenConns(200)                 // Maximum open connections
-	sqlDB.SetConnMaxLifetime(time.Hour)        // Connection max lifetime
-	sqlDB.SetConnMaxIdleTime(10 * time.Minute) // Idle connection timeout
-
-	log.Println("✅ Database connection established")
+	if isSQLite {
+		// SQLite doesn't support concurrent writers — use a single connection
+		sqlDB.SetMaxOpenConns(1)
+		sqlDB.SetMaxIdleConns(1)
+		log.Println("✅ SQLite database connected")
+	} else {
+		sqlDB.SetMaxIdleConns(25)
+		sqlDB.SetMaxOpenConns(200)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+		sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+		log.Println("✅ PostgreSQL database connected")
+	}
 	return nil
 }
 
-// Migrate runs auto-migration for all models.
+// schemaVersion is the current schema version. Bump this whenever you add new models or columns.
+const schemaVersion = 2
+
+type schemaVersionRow struct {
+	Version int `gorm:"primaryKey"`
+}
+
+func (schemaVersionRow) TableName() string { return "schema_version" }
+
+// Migrate runs auto-migration only when the schema version has changed.
+// This avoids slow table-inspection on every cold start.
 func Migrate() error {
-	return DB.AutoMigrate(
+	// Ensure the version tracker table exists
+	if err := DB.AutoMigrate(&schemaVersionRow{}); err != nil {
+		return fmt.Errorf("failed to create schema_version table: %w", err)
+	}
+
+	var current schemaVersionRow
+	result := DB.First(&current)
+
+	// Already at current version — skip
+	if result.Error == nil && current.Version >= schemaVersion {
+		log.Printf("Schema already at version %d, skipping migration", schemaVersion)
+		return nil
+	}
+
+	log.Printf("Running schema migration to version %d…", schemaVersion)
+
+	if err := DB.AutoMigrate(
+		// Platform models
+		&models.User{},
+		&models.Project{},
+		&models.ProjectShare{},
+		// App user models
+		&models.AppUser{},
+		&models.PasswordResetToken{},
+		&models.EmailVerificationToken{},
+		// 2FA
+		&models.TwoFactorCode{},
+		&models.TwoFactorSettings{},
+		// Collections & documents
+		&models.Collection{},
+		&models.Document{},
+		// Integrations
+		&models.Integration{},
+		&models.ProjectIntegration{},
+		// Dashboard
 		&models.AdminUser{},
 		&models.DashboardConfig{},
-	)
+		&models.ActivityLog{},
+	); err != nil {
+		return fmt.Errorf("auto-migrate failed: %w", err)
+	}
+
+	// Upsert version record
+	DB.Delete(&schemaVersionRow{}, "version > 0")
+	DB.Create(&schemaVersionRow{Version: schemaVersion})
+
+	log.Printf("✅ Schema migration to version %d complete", schemaVersion)
+	return nil
 }
 
 // Close closes the database connection

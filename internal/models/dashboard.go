@@ -28,6 +28,26 @@ func (d *DashboardConfig) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
+// ActivityLog records admin actions on projects for audit purposes.
+type ActivityLog struct {
+	ID        string    `gorm:"type:varchar(255);primaryKey" json:"id"`
+	ProjectID string    `gorm:"type:varchar(255);index" json:"project_id"`
+	Action    string    `gorm:"type:varchar(100);not null" json:"action"`   // e.g. "create_user", "delete_document"
+	Resource  string    `gorm:"type:varchar(100)" json:"resource"`           // e.g. "user", "document", "collection"
+	ResourceID string   `gorm:"type:varchar(255)" json:"resource_id"`
+	Detail    string    `gorm:"type:text" json:"detail"`
+	CreatedAt time.Time `gorm:"type:timestamp with time zone;default:now()" json:"created_at"`
+}
+
+func (ActivityLog) TableName() string { return "activity_logs" }
+
+func (a *ActivityLog) BeforeCreate(tx *gorm.DB) error {
+	if a.ID == "" {
+		a.ID = uuid.New().String()
+	}
+	return nil
+}
+
 // AdminUser represents the dashboard administrator account.
 // Separate from the platform User model — admin can only access /_/api/*.
 type AdminUser struct {

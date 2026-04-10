@@ -1,10 +1,73 @@
 package dashboard
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// CreateUser handles POST /_/api/projects/:id/users
+func CreateUser(c *fiber.Ctx) error {
+	projectID := c.Params("id")
+	if _, err := getProjectByID(projectID); err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
+	}
+
+	var req struct {
+		Email    string                 `json:"email"`
+		Password string                 `json:"password"`
+		Data     map[string]interface{} `json:"data"`
+		Roles    models.StringArray     `json:"roles"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Email == "" || req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "email and password are required"})
+	}
+
+	// Check duplicate
+	var count int64
+	database.DB.Model(&models.AppUser{}).Where("email = ? AND client_id = ?", strings.ToLower(req.Email), projectID).Count(&count)
+	if count > 0 {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "User with this email already exists"})
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to hash password"})
+	}
+
+	data := models.JSONMap{}
+	if req.Data != nil {
+		data = models.JSONMap(req.Data)
+	}
+	roles := req.Roles
+	if roles == nil {
+		roles = models.StringArray{}
+	}
+
+	user := models.AppUser{
+		ID:       uuid.New().String(),
+		ClientID: projectID,
+		Email:    strings.ToLower(req.Email),
+		Password: string(hashed),
+		Data:     data,
+		Roles:    roles,
+	}
+	if err := database.DB.Create(&user).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create user"})
+	}
+
+	Log(projectID, "create_user", "user", user.ID, user.Email)
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"id":    user.ID,
+		"email": user.Email,
+		"data":  user.Data,
+		"roles": user.Roles,
+	})
+}
 
 // ListUsers handles GET /_/api/projects/:id/users
 func ListUsers(c *fiber.Ctx) error {
@@ -130,6 +193,7 @@ func DeleteUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 	database.DB.Delete(&user)
+	Log(c.Params("id"), "delete_user", "user", user.ID, user.Email)
 	return c.JSON(fiber.Map{"message": "User deleted"})
 }
 

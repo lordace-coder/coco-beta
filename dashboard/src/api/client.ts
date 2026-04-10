@@ -38,7 +38,7 @@ export const projectsApi = {
   list: () => api.get<{ data: Project[]; total: number }>("/projects"),
   get: (id: string) => api.get<Project>(`/projects/${id}`),
   create: (name: string) => api.post<Project>("/projects", { name }),
-  update: (id: string, data: Partial<{ name: string; allowed_origins: string[]; active: boolean }>) =>
+  update: (id: string, data: Partial<{ name: string; allowed_origins: string[]; active: boolean; configs: Record<string, unknown> }>) =>
     api.patch<Project>(`/projects/${id}`, data),
   delete: (id: string) => api.delete(`/projects/${id}`),
   regenKey: (id: string) => api.post<{ api_key: string }>(`/projects/${id}/regen-key`),
@@ -48,6 +48,8 @@ export const projectsApi = {
 export const usersApi = {
   list: (projectId: string, params?: { limit?: number; offset?: number }) =>
     api.get<PaginatedResponse<AppUser>>(`/projects/${projectId}/users`, { params }),
+  create: (projectId: string, data: { email: string; password: string; data?: Record<string, unknown>; roles?: string[] }) =>
+    api.post<AppUser>(`/projects/${projectId}/users`, data),
   get: (projectId: string, userId: string) =>
     api.get<AppUser>(`/projects/${projectId}/users/${userId}`),
   update: (projectId: string, userId: string, data: object) =>
@@ -61,12 +63,16 @@ export const usersApi = {
 export const collectionsApi = {
   list: (projectId: string) =>
     api.get<{ data: Collection[]; total: number }>(`/projects/${projectId}/collections`),
+  create: (projectId: string, name: string) =>
+    api.post<Collection>(`/projects/${projectId}/collections`, { name }),
   get: (projectId: string, colId: string) =>
     api.get<Collection & { document_count: number }>(`/projects/${projectId}/collections/${colId}`),
   delete: (projectId: string, colId: string) =>
     api.delete(`/projects/${projectId}/collections/${colId}`),
   listDocuments: (projectId: string, colId: string, params?: { limit?: number; offset?: number; sort?: string; order?: string }) =>
     api.get<PaginatedResponse<Document>>(`/projects/${projectId}/collections/${colId}/documents`, { params }),
+  createDocument: (projectId: string, colId: string, data: Record<string, unknown>) =>
+    api.post<Document>(`/projects/${projectId}/collections/${colId}/documents`, { data }),
   getDocument: (projectId: string, colId: string, docId: string) =>
     api.get<Document>(`/projects/${projectId}/collections/${colId}/documents/${docId}`),
   updateDocument: (projectId: string, colId: string, docId: string, data: object, override = false) =>
@@ -90,6 +96,12 @@ export const configApi = {
   testSmtp: (to: string) => api.post("/config/smtp/test", { to }),
 };
 
+// ── Logs ──────────────────────────────────────────────────────────────────────
+export const logsApi = {
+  list: (projectId: string, params?: { limit?: number; offset?: number }) =>
+    api.get<PaginatedResponse<ActivityLog>>(`/projects/${projectId}/logs`, { params }),
+};
+
 // ── Health ────────────────────────────────────────────────────────────────────
 export const healthApi = {
   check: () => api.get("/health"),
@@ -108,6 +120,7 @@ export interface Project {
   api_key: string;
   active: boolean;
   allowed_origins: string[];
+  configs: Record<string, unknown>;
   created_at: string;
 }
 
@@ -147,6 +160,16 @@ export interface ConfigEntry {
   key: string;
   value: string;
   is_secret: boolean;
+}
+
+export interface ActivityLog {
+  id: string;
+  project_id: string;
+  action: string;
+  resource: string;
+  resource_id: string;
+  detail: string;
+  created_at: string;
 }
 
 export interface PaginatedResponse<T> {

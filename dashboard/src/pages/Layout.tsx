@@ -2,10 +2,13 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 
+const VERSION = "0.1.0";
+
 const navItems = [
   { label: "Overview", href: "/" },
   { label: "Projects", href: "/projects" },
   { label: "Settings", href: "/settings" },
+  { label: "Environment", href: "/env-setup" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -18,7 +21,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="flex w-56 flex-col border-r bg-card">
         <div className="border-b px-4 py-4">
           <span className="text-lg font-bold tracking-tight">Cocobase</span>
-          <p className="text-xs text-muted-foreground">Admin Dashboard</p>
+          <p className="text-xs text-muted-foreground">Admin Dashboard · v{VERSION}</p>
         </div>
         <nav className="flex-1 space-y-1 p-3">
           {navItems.map((item) => (

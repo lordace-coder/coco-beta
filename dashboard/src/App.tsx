@@ -10,6 +10,7 @@ import ProjectsPage from "@/pages/ProjectsPage";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import CollectionDetailPage from "@/pages/CollectionDetailPage";
 import SettingsPage from "@/pages/SettingsPage";
+import EnvSetupPage from "@/pages/EnvSetupPage";
 
 export default function App() {
   const token = useAuthStore((s) => s.token);
@@ -58,6 +59,7 @@ export default function App() {
               <Route path="/projects/:id" element={<ProjectDetailPage />} />
               <Route path="/projects/:id/collections/:colId" element={<CollectionDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/env-setup" element={<EnvSetupPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Layout>

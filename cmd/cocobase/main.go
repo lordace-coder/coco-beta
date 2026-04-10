@@ -96,6 +96,10 @@ func main() {
 	})
 	app.Use(compress.New(compress.Config{
 		Level: compress.LevelBestSpeed,
+		Next: func(c *fiber.Ctx) bool {
+			// Skip compression for dashboard static assets — handled manually
+			return len(c.Path()) >= 2 && c.Path()[:2] == "/_"
+		},
 	}))
 	// Setup middleware
 	middleware.SetupMiddleware(app)

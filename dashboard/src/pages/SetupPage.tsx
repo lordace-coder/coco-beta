@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { authApi } from "@/api/client";
 import { useAuthStore } from "@/hooks/useAuth";
 
 export default function SetupPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,6 +30,7 @@ export default function SetupPage() {
     try {
       const { data } = await authApi.setup(email, password);
       setAuth(data.access_token, data.admin);
+      await qc.invalidateQueries({ queryKey: ["setup-status"] });
       navigate("/");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;

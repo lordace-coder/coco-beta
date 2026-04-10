@@ -1,8 +1,10 @@
 package routes
 
 import (
+	"io"
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"github.com/patrick/cocobase/internal/api/handlers/dashboard"
 	"github.com/patrick/cocobase/internal/api/middleware"
 	"github.com/patrick/cocobase/internal/dashboardfs"
@@ -46,6 +48,7 @@ func SetupDashboardRoutes(app *fiber.App) {
 
 	// Project → users
 	projects.Get("/:id/users", dashboard.ListUsers)
+	projects.Post("/:id/users", dashboard.CreateUser)
 	projects.Get("/:id/users/:userId", dashboard.GetUser)
 	projects.Patch("/:id/users/:userId", dashboard.UpdateUser)
 	projects.Delete("/:id/users/:userId", dashboard.DeleteUser)
@@ -53,14 +56,19 @@ func SetupDashboardRoutes(app *fiber.App) {
 
 	// Project → collections
 	projects.Get("/:id/collections", dashboard.ListCollections)
+	projects.Post("/:id/collections", dashboard.CreateCollection)
 	projects.Get("/:id/collections/:colId", dashboard.GetCollection)
 	projects.Delete("/:id/collections/:colId", dashboard.DeleteCollection)
 
 	// Project → collection documents
 	projects.Get("/:id/collections/:colId/documents", dashboard.ListDocuments)
+	projects.Post("/:id/collections/:colId/documents", dashboard.CreateDocumentDashboard)
 	projects.Get("/:id/collections/:colId/documents/:docId", dashboard.GetDocument)
 	projects.Patch("/:id/collections/:colId/documents/:docId", dashboard.UpdateDocument)
 	projects.Delete("/:id/collections/:colId/documents/:docId", dashboard.DeleteDocument)
+
+	// Project → activity logs
+	projects.Get("/:id/logs", dashboard.ListLogs)
 
 	// Project → files
 	projects.Get("/:id/files", dashboard.ListFiles)
@@ -73,13 +81,54 @@ func SetupDashboardRoutes(app *fiber.App) {
 	projects.Delete("/:id/integrations/:piId", dashboard.DeleteProjectIntegration)
 
 	// ── Serve embedded React SPA at /_/* ──────────────────────────────────────
-	spaFS := filesystem.New(filesystem.Config{
-		Root:         dashboardfs.HTTPRoot(),
-		Browse:       false,
-		Index:        "index.html",
-		NotFoundFile: "index.html",
-	})
-	app.Get("/_", spaFS)
-	app.Get("/_/", spaFS)
-	app.Get("/_/*", spaFS)
+	app.Get("/_", serveSPA)
+	app.Get("/_/*", serveSPA)
+}
+
+var mimeTypes = map[string]string{
+	".html": "text/html; charset=utf-8",
+	".js":   "application/javascript; charset=utf-8",
+	".css":  "text/css; charset=utf-8",
+	".svg":  "image/svg+xml",
+	".png":  "image/png",
+	".ico":  "image/x-icon",
+	".json": "application/json",
+}
+
+func serveSPA(c *fiber.Ctx) error {
+	reqPath := c.Path()
+	filePath := strings.TrimPrefix(reqPath, "/_")
+	if filePath == "" || filePath == "/" {
+		filePath = "/index.html"
+	}
+
+	root := dashboardfs.HTTPRoot()
+
+	f, err := root.Open(filePath)
+	if err != nil {
+		// SPA fallback — serve index.html for client-side routes
+		f, err = root.Open("/index.html")
+		if err != nil {
+			return fiber.ErrNotFound
+		}
+		filePath = "/index.html"
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return fiber.ErrInternalServerError
+	}
+
+	// Determine MIME type
+	dot := strings.LastIndex(filePath, ".")
+	mimeType := "application/octet-stream"
+	if dot >= 0 {
+		if mt, ok := mimeTypes[filePath[dot:]]; ok {
+			mimeType = mt
+		}
+	}
+
+	c.Set("Content-Type", mimeType)
+	return c.Send(data)
 }

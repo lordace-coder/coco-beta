@@ -64,8 +64,15 @@ var AppConfig *Config
 
 // LoadConfig loads environment variables and initializes the config
 func LoadConfig() *Config {
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
+	// Load .env file — try current dir, then up two levels (for air running from bin/)
+	loaded := false
+	for _, path := range []string{".env", "../.env", "../../.env"} {
+		if err := godotenv.Load(path); err == nil {
+			loaded = true
+			break
+		}
+	}
+	if !loaded {
 		log.Println("No .env file found, using system environment variables")
 	}
 

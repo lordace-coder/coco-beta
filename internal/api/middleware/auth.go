@@ -15,7 +15,6 @@ import (
 // Cache entry for project lookups
 type projectCacheEntry struct {
 	project   *models.Project
-	user      *models.User
 	expiresAt time.Time
 }
 
@@ -69,9 +68,7 @@ func RequireAPIKey(c *fiber.Ctx) error {
 	projectCacheMutex.RUnlock()
 
 	if found && time.Now().Before(cached.expiresAt) {
-		// Cache hit - use cached data
 		c.Locals("project", cached.project)
-		c.Locals("user", cached.user)
 		return c.Next()
 	}
 
@@ -90,27 +87,15 @@ func RequireAPIKey(c *fiber.Ctx) error {
 		})
 	}
 
-	// Load project owner
-	var user models.User
-	if err := database.DB.Where("id = ?", project.UserID).First(&user).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   true,
-			"message": "Failed to load project owner",
-		})
-	}
-
 	// Store in cache
 	projectCacheMutex.Lock()
 	projectCache[apiKey] = &projectCacheEntry{
 		project:   &project,
-		user:      &user,
 		expiresAt: time.Now().Add(cacheTTL),
 	}
 	projectCacheMutex.Unlock()
 
-	// Store project and user in context
 	c.Locals("project", &project)
-	c.Locals("user", &user)
 
 	return c.Next()
 }

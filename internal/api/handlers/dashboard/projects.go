@@ -60,9 +60,10 @@ func UpdateProject(c *fiber.Ctx) error {
 	}
 
 	var req struct {
-		Name           *string            `json:"name"`
-		AllowedOrigins models.StringArray `json:"allowed_origins"`
-		Active         *bool              `json:"active"`
+		Name           *string                `json:"name"`
+		AllowedOrigins models.StringArray     `json:"allowed_origins"`
+		Active         *bool                  `json:"active"`
+		Configs        map[string]interface{} `json:"configs"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
@@ -77,6 +78,9 @@ func UpdateProject(c *fiber.Ctx) error {
 	}
 	if req.Active != nil {
 		updates["active"] = *req.Active
+	}
+	if req.Configs != nil {
+		updates["configs"] = models.JSONMap(req.Configs)
 	}
 
 	if len(updates) > 0 {

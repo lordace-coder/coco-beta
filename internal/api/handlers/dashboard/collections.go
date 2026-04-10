@@ -7,6 +7,52 @@ import (
 	"gorm.io/gorm"
 )
 
+// CreateCollection handles POST /_/api/projects/:id/collections
+func CreateCollection(c *fiber.Ctx) error {
+	projectID := c.Params("id")
+	if _, err := getProjectByID(projectID); err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Name == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "name is required"})
+	}
+
+	col := models.Collection{ProjectID: projectID, Name: req.Name}
+	if err := database.DB.Create(&col).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create collection"})
+	}
+
+	Log(projectID, "create_collection", "collection", col.ID, col.Name)
+	return c.Status(fiber.StatusCreated).JSON(col)
+}
+
+// CreateDocument handles POST /_/api/projects/:id/collections/:colId/documents (dashboard)
+func CreateDocumentDashboard(c *fiber.Ctx) error {
+	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
+	}
+
+	var req struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	if err := c.BodyParser(&req); err != nil || req.Data == nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "data is required"})
+	}
+
+	doc := models.Document{CollectionID: col.ID, Data: req.Data}
+	if err := database.DB.Create(&doc).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create document"})
+	}
+
+	Log(c.Params("id"), "create_document", "document", doc.ID, col.Name)
+	return c.Status(fiber.StatusCreated).JSON(doc)
+}
+
 // ListCollections handles GET /_/api/projects/:id/collections
 func ListCollections(c *fiber.Ctx) error {
 	projectID := c.Params("id")
@@ -54,6 +100,7 @@ func DeleteCollection(c *fiber.Ctx) error {
 	if err := database.DB.Delete(col).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete collection"})
 	}
+	Log(c.Params("id"), "delete_collection", "collection", col.ID, col.Name)
 	return c.JSON(fiber.Map{"message": "Collection deleted"})
 }
 
@@ -157,6 +204,7 @@ func DeleteDocument(c *fiber.Ctx) error {
 		Delete(&models.Document{}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete document"})
 	}
+	Log(c.Params("id"), "delete_document", "document", c.Params("docId"), col.Name)
 	return c.JSON(fiber.Map{"message": "Document deleted"})
 }
 
