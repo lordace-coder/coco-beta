@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "@/api/client";
 import { DynamicForm } from "@/components/DynamicForm";
+import { useInstance } from "@/hooks/useInstance";
 
 const LIMIT = 20;
 
-export function UsersTab({ projectId }: { projectId: string }) {
+export function UsersTab() {
+  const projectId = useInstance();
   const qc = useQueryClient();
   const [offset, setOffset] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
@@ -36,7 +38,6 @@ export function UsersTab({ projectId }: { projectId: string }) {
 
       {showCreate && (
         <CreateUserForm
-          projectId={projectId}
           onDone={() => {
             setShowCreate(false);
             qc.invalidateQueries({ queryKey: ["users", projectId] });
@@ -98,7 +99,8 @@ export function UsersTab({ projectId }: { projectId: string }) {
   );
 }
 
-function CreateUserForm({ projectId, onDone }: { projectId: string; onDone: () => void }) {
+function CreateUserForm({ onDone }: { onDone: () => void }) {
+  const projectId = useInstance();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState("");

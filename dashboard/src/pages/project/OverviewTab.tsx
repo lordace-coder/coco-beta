@@ -11,10 +11,6 @@ export function OverviewTab({ project, onRegen }: Props) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border bg-card divide-y">
-        <Row label="Project ID">
-          <span className="font-mono text-sm">{project.id}</span>
-          <CopyButton value={project.id} />
-        </Row>
         <Row label="API Key">
           <span className="font-mono text-sm truncate max-w-xs">{project.api_key}</span>
           <CopyButton value={project.api_key} />
@@ -25,10 +21,9 @@ export function OverviewTab({ project, onRegen }: Props) {
             Regenerate
           </button>
         </Row>
-        <Row label="Status">
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${project.active ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-            {project.active ? "Active" : "Inactive"}
-          </span>
+        <Row label="Base URL">
+          <span className="font-mono text-sm">{window.location.origin}</span>
+          <CopyButton value={window.location.origin} />
         </Row>
         <Row label="Created">
           <span className="text-sm">{new Date(project.created_at).toLocaleString()}</span>

@@ -140,6 +140,86 @@ func GetAppUserFromContext(c *fiber.Ctx) *models.AppUser {
 	return appUser
 }
 
+// LoadProjectByID loads a project from the :projectId URL param (no API key needed).
+// Used by the /fn/:projectId/* route so cloud functions don't require x-api-key.
+func LoadProjectByID(c *fiber.Ctx) error {
+	projectID := c.Params("projectId")
+	if projectID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   true,
+			"message": "project ID required in URL",
+		})
+	}
+
+	// Check cache first (keyed by project ID)
+	cacheKey := "id:" + projectID
+	projectCacheMutex.RLock()
+	cached, found := projectCache[cacheKey]
+	projectCacheMutex.RUnlock()
+
+	if found && time.Now().Before(cached.expiresAt) {
+		c.Locals("project", cached.project)
+		return c.Next()
+	}
+
+	var project models.Project
+	if err := database.DB.Where("id = ? AND active = ?", projectID, true).First(&project).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":   true,
+				"message": "Project not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   true,
+			"message": "Database error",
+		})
+	}
+
+	projectCacheMutex.Lock()
+	projectCache[cacheKey] = &projectCacheEntry{
+		project:   &project,
+		expiresAt: time.Now().Add(cacheTTL),
+	}
+	projectCacheMutex.Unlock()
+
+	c.Locals("project", &project)
+	return c.Next()
+}
+
+// LoadDefaultProject loads the single default project (first project in DB).
+// Used by /functions/func/* routes in single-instance mode — no project ID in URL.
+func LoadDefaultProject(c *fiber.Ctx) error {
+	const cacheKey = "default_project"
+
+	projectCacheMutex.RLock()
+	cached, found := projectCache[cacheKey]
+	projectCacheMutex.RUnlock()
+
+	if found && time.Now().Before(cached.expiresAt) {
+		c.Locals("project", cached.project)
+		return c.Next()
+	}
+
+	var project models.Project
+	if err := database.DB.Where("active = ?", true).Order("created_at asc").First(&project).Error; err != nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error":   true,
+			"message": "No active project found",
+		})
+	}
+
+	projectCacheMutex.Lock()
+	projectCache[cacheKey] = &projectCacheEntry{
+		project:   &project,
+		expiresAt: time.Now().Add(cacheTTL),
+	}
+	projectCacheMutex.Unlock()
+
+	c.Locals("project", &project)
+	return c.Next()
+}
+
 // RequireAppUser validates JWT token and loads app user
 func RequireAppUser(c *fiber.Ctx) error {
 	// Extract token from Authorization header

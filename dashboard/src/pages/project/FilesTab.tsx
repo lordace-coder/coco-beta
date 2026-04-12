@@ -1,7 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { filesApi } from "@/api/client";
+import { useInstance } from "@/hooks/useInstance";
 
-export function FilesTab({ projectId }: { projectId: string }) {
+export function FilesTab() {
+  const projectId = useInstance();
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({

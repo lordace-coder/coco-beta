@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/api/handlers"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 	"gorm.io/gorm"
@@ -85,6 +86,7 @@ func GetCollection(c *fiber.Ctx) error {
 		"created_at":     col.CreatedAt,
 		"permissions":    col.Permissions,
 		"webhooks":       col.Webhooks,
+		"sentinels":      col.Sentinels,
 		"document_count": docCount,
 	})
 }
@@ -154,6 +156,10 @@ func UpdateCollection(c *fiber.Ctx) error {
 	if err := database.DB.Save(col).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update collection"})
 	}
+
+	// Evict cached collection so document handlers pick up new sentinels/permissions
+	handlers.InvalidateCollectionCache(c.Params("id"), col.ID)
+	handlers.InvalidateCollectionCache(c.Params("id"), col.Name)
 
 	Log(c.Params("id"), "update_collection", "collection", col.ID, col.Name)
 	return c.JSON(fiber.Map{

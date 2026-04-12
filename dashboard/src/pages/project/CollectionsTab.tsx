@@ -3,8 +3,10 @@ import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { collectionsApi } from "@/api/client";
 import { CopyButton } from "@/components/CopyButton";
+import { useInstance } from "@/hooks/useInstance";
 
-export function CollectionsTab({ projectId }: { projectId: string }) {
+export function CollectionsTab() {
+  const projectId = useInstance();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
@@ -84,7 +86,7 @@ export function CollectionsTab({ projectId }: { projectId: string }) {
               {cols.map((col) => (
                 <tr key={col.id} className="border-b last:border-0 hover:bg-muted/20">
                   <td className="px-4 py-2.5">
-                    <Link to={`/projects/${projectId}/collections/${col.id}`} className="font-medium hover:underline">{col.name}</Link>
+                    <Link to={`/collections/${col.id}`} className="font-medium hover:underline">{col.name}</Link>
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="font-mono text-xs text-muted-foreground">{col.id.slice(0, 8)}…</span>

@@ -5,9 +5,11 @@ import { collectionsApi, projectsApi } from "@/api/client";
 import type { Document, Collection, CollectionPermissions, CollectionWebhooks, CollectionSentinels } from "@/api/client";
 import { DynamicForm } from "@/components/DynamicForm";
 import { SentinelInput } from "@/components/SentinelInput";
+import { useInstance } from "@/hooks/useInstance";
 
 export default function CollectionDetailPage() {
-  const { id: projectId, colId } = useParams<{ id: string; colId: string }>();
+  const projectId = useInstance();
+  const { colId } = useParams<{ colId: string }>();
   const qc = useQueryClient();
   const [offset, setOffset] = useState(0);
   const limit = 20;
@@ -137,9 +139,7 @@ export default function CollectionDetailPage() {
     <div className="space-y-6">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link to="/projects" className="hover:underline">Projects</Link>
-        <span>/</span>
-        <Link to={`/projects/${projectId}`} className="hover:underline">{projectId}</Link>
+        <Link to="/" className="hover:underline">Home</Link>
         <span>/</span>
         <span className="text-foreground">{col?.name ?? colId}</span>
       </div>

@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi } from "@/api/client";
 import type { Project } from "@/api/client";
+import { useInstance } from "@/hooks/useInstance";
 
 export function ConfigTab({ project }: { project: Project }) {
+  const projectId = useInstance();
   const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
 
@@ -41,9 +43,9 @@ export function ConfigTab({ project }: { project: Project }) {
 
   const updateMutation = useMutation({
     mutationFn: (body: { configs: Record<string, unknown>; allowed_origins: string[] }) =>
-      projectsApi.update(project.id, body),
+      projectsApi.update(projectId, body),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["project", project.id] });
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     },
@@ -93,7 +95,7 @@ export function ConfigTab({ project }: { project: Project }) {
   return (
     <form onSubmit={handleSave} className="space-y-6">
       {/* Allowed Origins */}
-      <Section title="Allowed Origins" desc="Domains allowed to call this project's API. Empty = allow all.">
+      <Section title="Allowed Origins" desc="Domains allowed to call this API. Empty = allow all.">
         <div className="flex flex-wrap gap-2 mb-3 min-h-[28px]">
           {origins.length === 0
             ? <span className="text-xs text-muted-foreground">All origins allowed</span>
@@ -115,7 +117,7 @@ export function ConfigTab({ project }: { project: Project }) {
       </Section>
 
       {/* Auth toggles */}
-      <Section title="Authentication" desc="Control which auth features are enabled for this project's users.">
+      <Section title="Authentication" desc="Control which auth features are enabled for users.">
         <div className="space-y-3">
           <Toggle label="Email verification" desc="Users must verify email before they can log in."
             checked={form.ENABLE_EMAIL_VERIFICATION} onChange={() => toggle("ENABLE_EMAIL_VERIFICATION")} />
@@ -161,7 +163,7 @@ export function ConfigTab({ project }: { project: Project }) {
       </Section>
 
       {/* Mailer */}
-      <Section title="Email / Mailer" desc="Configure how this project sends emails. Resend takes priority over SMTP if both are set.">
+      <Section title="Email / Mailer" desc="Configure how emails are sent. Resend takes priority over SMTP if both are set.">
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground bg-muted rounded-md px-3 py-2">
             Leave fields empty to fall back to global .env SMTP settings. Set a Resend API key to use Resend instead of SMTP.

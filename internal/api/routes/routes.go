@@ -21,8 +21,14 @@ func SetupRoutes(app *fiber.App) {
 	// Setup collection routes
 	SetupCollectionRoutes(app)
 
-	// Setup cloud function HTTP routes  (/fn/* — requires API key)
-	app.All("/fn/*", middleware.RequireAPIKey, handlers.HandleHTTPFunction)
+	// Cloud function HTTP routes — single-instance: /functions/func/:functionName[/*]
+	// No project ID in URL; the default (only) project is loaded automatically.
+	app.All("/functions/func/:functionName", middleware.LoadDefaultProject, handlers.HandleHTTPFunction)
+	app.All("/functions/func/:functionName/*", middleware.LoadDefaultProject, handlers.HandleHTTPFunction)
+
+	// Legacy: /functions/:projectId/func/:functionName[/*] — kept for backwards compat.
+	app.All("/functions/:projectId/func/:functionName", middleware.LoadProjectByID, handlers.HandleHTTPFunction)
+	app.All("/functions/:projectId/func/:functionName/*", middleware.LoadProjectByID, handlers.HandleHTTPFunction)
 
 	// Setup auth routes
 	SetupAuthRoutes(app)

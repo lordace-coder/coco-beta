@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -58,6 +59,16 @@ func isPrivateHost(host string) bool {
 	return false
 }
 
+// inlineTask is a background task captured by queue.add — a JS callable + data.
+// It must be run on the same goja runtime that created it (goja is not goroutine-safe).
+type inlineTask struct {
+	handler  goja.Callable
+	data     interface{}
+	rt       *goja.Runtime
+	rctx     *RunContext // isolated context for the task
+	ctx      goja.Value  // pre-built JS ctx for the task
+}
+
 // RunContext is passed to the JS sandbox for each invocation.
 type RunContext struct {
 	// HTTP request info (set for http-triggered functions)
@@ -93,6 +104,10 @@ type RunContext struct {
 
 	// Log output collected during run
 	LogOutput strings.Builder
+
+	// Inline background tasks queued via queue.add — drained after response is sent.
+	// Must be run on the same goroutine as the JS handler (goja is not goroutine-safe).
+	inlineTasks []inlineTask
 }
 
 // VM wraps a Goja runtime with its compiled program cache.
@@ -377,27 +392,53 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 
 	// ── ctx.db — project-scoped database access ───────────────────────────────
 	db := rt.NewObject()
+	projectID := fn.ProjectID
 
-	_ = db.Set("list", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+	// db.query(collection, options?) — filtered query with operators
+	// options: { limit, offset, sort, order, select, populate, ...filters }
+	// Filter keys use operator suffixes: price_gte, name_contains, status_in, etc.
+	_ = db.Set("query", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		colName := call.Argument(0).String()
-		col, err := findCollection(fn.ProjectID, colName)
+		col, err := findCollection(projectID, colName)
 		if err != nil {
 			panic(rt.ToValue(err.Error()))
 		}
-		var docs []models.Document
-		database.DB.Where("collection_id = ?", col.ID).
-			Order("created_at desc").Limit(500).Find(&docs)
-		result := make([]interface{}, len(docs))
-		for i, d := range docs {
-			result[i] = docToMap(&d)
+		opts := exportMap(call.Argument(1))
+		docs, total := queryDocs(col.ID, opts, false)
+		hasMore := false
+		limit := optInt(opts, "limit", 10)
+		offset := optInt(opts, "offset", 0)
+		if int64(offset+limit) < total {
+			hasMore = true
 		}
-		return rt.ToValue(result)
+		out := rt.NewObject()
+		_ = out.Set("data", rt.ToValue(docs))
+		_ = out.Set("total", total)
+		_ = out.Set("has_more", hasMore)
+		return out
 	}))
 
+	// db.findOne(collection, options?) — return first matching doc or null
+	_ = db.Set("findOne", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		colName := call.Argument(0).String()
+		col, err := findCollection(projectID, colName)
+		if err != nil {
+			panic(rt.ToValue(err.Error()))
+		}
+		opts := exportMap(call.Argument(1))
+		opts["limit"] = 1
+		docs, _ := queryDocs(col.ID, opts, false)
+		if len(docs) == 0 {
+			return goja.Null()
+		}
+		return rt.ToValue(docs[0])
+	}))
+
+	// db.get(collection, id) — get doc by ID
 	_ = db.Set("get", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		colName := call.Argument(0).String()
 		docID := call.Argument(1).String()
-		col, err := findCollection(fn.ProjectID, colName)
+		col, err := findCollection(projectID, colName)
 		if err != nil {
 			panic(rt.ToValue(err.Error()))
 		}
@@ -408,10 +449,11 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 		return rt.ToValue(docToMap(&doc))
 	}))
 
+	// db.create(collection, data) — insert a new document
 	_ = db.Set("create", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		colName := call.Argument(0).String()
 		data := call.Argument(1).Export()
-		col, err := findCollection(fn.ProjectID, colName)
+		col, err := findCollection(projectID, colName)
 		if err != nil {
 			panic(rt.ToValue(err.Error()))
 		}
@@ -426,11 +468,12 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 		return rt.ToValue(docToMap(&doc))
 	}))
 
+	// db.update(collection, id, data) — merge fields into existing doc
 	_ = db.Set("update", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		colName := call.Argument(0).String()
 		docID := call.Argument(1).String()
 		data := call.Argument(2).Export()
-		col, err := findCollection(fn.ProjectID, colName)
+		col, err := findCollection(projectID, colName)
 		if err != nil {
 			panic(rt.ToValue(err.Error()))
 		}
@@ -447,15 +490,41 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 		return rt.ToValue(docToMap(&doc))
 	}))
 
+	// db.delete(collection, id) — delete a document
 	_ = db.Set("delete", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		colName := call.Argument(0).String()
 		docID := call.Argument(1).String()
-		col, err := findCollection(fn.ProjectID, colName)
+		col, err := findCollection(projectID, colName)
 		if err != nil {
 			panic(rt.ToValue(err.Error()))
 		}
 		database.DB.Where("id = ? AND collection_id = ?", docID, col.ID).Delete(&models.Document{})
 		return goja.Undefined()
+	}))
+
+	// db.queryUsers(options?) — query app_users with same filter syntax
+	_ = db.Set("queryUsers", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		opts := exportMap(call.Argument(0))
+		users, total := queryUsers(projectID, opts)
+		limit := optInt(opts, "limit", 10)
+		offset := optInt(opts, "offset", 0)
+		hasMore := int64(offset+limit) < total
+		out := rt.NewObject()
+		_ = out.Set("data", rt.ToValue(users))
+		_ = out.Set("total", total)
+		_ = out.Set("has_more", hasMore)
+		return out
+	}))
+
+	// db.findUser(options?) — return first matching user or null
+	_ = db.Set("findUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		opts := exportMap(call.Argument(0))
+		opts["limit"] = 1
+		users, _ := queryUsers(projectID, opts)
+		if len(users) == 0 {
+			return goja.Null()
+		}
+		return rt.ToValue(users[0])
 	}))
 
 	_ = obj.Set("db", db)
@@ -489,10 +558,22 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 	_ = obj.Set("log", rt.ToValue(func(call goja.FunctionCall) goja.Value {
 		parts := make([]string, len(call.Arguments))
 		for i, a := range call.Arguments {
-			parts[i] = fmt.Sprintf("%v", a.Export())
+			exported := a.Export()
+			switch v := exported.(type) {
+			case map[string]interface{}, []interface{}:
+				b, err := json.Marshal(v)
+				if err != nil {
+					parts[i] = fmt.Sprintf("%v", v)
+				} else {
+					parts[i] = string(b)
+				}
+			default:
+				parts[i] = fmt.Sprintf("%v", exported)
+			}
 		}
 		line := strings.Join(parts, " ")
 		rctx.LogOutput.WriteString(line + "\n")
+		log.Printf("[fn:%s] %s", rctx.ProjectID[:8], line)
 		return goja.Undefined()
 	}))
 
@@ -531,10 +612,218 @@ func buildJSContext(rt *goja.Runtime, fn *models.Function, rctx *RunContext) goj
 		return goja.Undefined()
 	}))
 
+	// ── ctx.auth — app user management ──────────────────────────────────────
+	authObj := rt.NewObject()
+
+	// auth.createUser({ email, password, data?, roles? }) → user
+	_ = authObj.Set("createUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		opts := exportMap(call.Argument(0))
+		email, _ := opts["email"].(string)
+		password, _ := opts["password"].(string)
+		if email == "" {
+			panic(rt.ToValue("auth.createUser: email is required"))
+		}
+		if password == "" {
+			panic(rt.ToValue("auth.createUser: password is required"))
+		}
+
+		// Check duplicate
+		var existing models.AppUser
+		if err := database.DB.Where("client_id = ? AND email = ?", projectID, email).First(&existing).Error; err == nil {
+			panic(rt.ToValue("auth.createUser: email already exists"))
+		}
+
+		data, _ := opts["data"].(map[string]interface{})
+		if data == nil {
+			data = map[string]interface{}{}
+		}
+
+		var roles models.StringArray
+		if r, ok := opts["roles"].([]interface{}); ok {
+			for _, v := range r {
+				if s, ok := v.(string); ok {
+					roles = append(roles, s)
+				}
+			}
+		}
+		if roles == nil {
+			roles = models.StringArray{}
+		}
+
+		user := models.AppUser{
+			ClientID: projectID,
+			Email:    email,
+			Data:     models.JSONMap(data),
+			Roles:    roles,
+		}
+		if err := user.SetPassword(password); err != nil {
+			panic(rt.ToValue("auth.createUser: failed to hash password"))
+		}
+		if err := database.DB.Create(&user).Error; err != nil {
+			panic(rt.ToValue("auth.createUser: " + err.Error()))
+		}
+		return rt.ToValue(userToMap(&user))
+	}))
+
+	// auth.updateUser(id, { email?, password?, data?, roles?, emailVerified? }) → user
+	_ = authObj.Set("updateUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		userID := call.Argument(0).String()
+		opts := exportMap(call.Argument(1))
+
+		var user models.AppUser
+		if err := database.DB.Where("id = ? AND client_id = ?", userID, projectID).First(&user).Error; err != nil {
+			panic(rt.ToValue("auth.updateUser: user not found"))
+		}
+
+		if email, ok := opts["email"].(string); ok && email != "" {
+			user.Email = email
+		}
+		if password, ok := opts["password"].(string); ok && password != "" {
+			if err := user.SetPassword(password); err != nil {
+				panic(rt.ToValue("auth.updateUser: failed to hash password"))
+			}
+		}
+		if data, ok := opts["data"].(map[string]interface{}); ok {
+			for k, v := range data {
+				user.Data[k] = v
+			}
+		}
+		if r, ok := opts["roles"].([]interface{}); ok {
+			user.Roles = models.StringArray{}
+			for _, v := range r {
+				if s, ok := v.(string); ok {
+					user.Roles = append(user.Roles, s)
+				}
+			}
+		}
+		if verified, ok := opts["emailVerified"].(bool); ok {
+			user.EmailVerified = verified
+		}
+
+		if err := database.DB.Save(&user).Error; err != nil {
+			panic(rt.ToValue("auth.updateUser: " + err.Error()))
+		}
+		return rt.ToValue(userToMap(&user))
+	}))
+
+	// auth.deleteUser(id)
+	_ = authObj.Set("deleteUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		userID := call.Argument(0).String()
+		database.DB.Where("id = ? AND client_id = ?", userID, projectID).Delete(&models.AppUser{})
+		return goja.Undefined()
+	}))
+
+	// auth.getUser(id) → user or null
+	_ = authObj.Set("getUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		userID := call.Argument(0).String()
+		var user models.AppUser
+		if err := database.DB.Where("id = ? AND client_id = ?", userID, projectID).First(&user).Error; err != nil {
+			return goja.Null()
+		}
+		return rt.ToValue(userToMap(&user))
+	}))
+
+	// auth.findUser(options) → user or null  (same filter syntax as db.queryUsers)
+	_ = authObj.Set("findUser", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		opts := exportMap(call.Argument(0))
+		opts["limit"] = 1
+		users, _ := queryUsers(projectID, opts)
+		if len(users) == 0 {
+			return goja.Null()
+		}
+		return rt.ToValue(users[0])
+	}))
+
+	// auth.queryUsers(options) → { data, total, has_more }
+	_ = authObj.Set("queryUsers", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		opts := exportMap(call.Argument(0))
+		users, total := queryUsers(projectID, opts)
+		limit := optInt(opts, "limit", 10)
+		offset := optInt(opts, "offset", 0)
+		out := rt.NewObject()
+		_ = out.Set("data", rt.ToValue(users))
+		_ = out.Set("total", total)
+		_ = out.Set("has_more", int64(offset+limit) < total)
+		return out
+	}))
+
+	_ = obj.Set("auth", authObj)
+
+	// ── ctx.queue — background task queue ────────────────────────────────────
+	// queue.add(fn, data?)  — register an inline JS function to run after the
+	//   response is sent. Runs on the SAME goroutine / runtime as the handler
+	//   (goja runtimes are single-threaded; sharing across goroutines is unsafe).
+	//
+	// queue.call(fileName, data?) — dispatch app.on("queue", fileName, handler)
+	//   in a background goroutine via a fresh registry sync (safe because each
+	//   dispatch builds its own runtime context).
+	queueObj := rt.NewObject()
+
+	_ = queueObj.Set("add", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		handler, ok := goja.AssertFunction(call.Argument(0))
+		if !ok {
+			panic(rt.ToValue("queue.add: first argument must be a function"))
+		}
+		data := call.Argument(1).Export()
+
+		// Build an isolated RunContext for the task so it can log independently.
+		taskRctx := &RunContext{
+			ProjectID:   rctx.ProjectID,
+			ProjectName: rctx.ProjectName,
+			Doc:         rctx.Doc,
+			User:        rctx.User,
+			Broadcast:   rctx.Broadcast,
+			ReqMethod:   "QUEUE",
+		}
+		taskCtx := buildJSContext(rt, fn, taskRctx)
+
+		// Store on the parent rctx — drained by the caller (engine) after
+		// the response has been written, still on the handler goroutine.
+		rctx.inlineTasks = append(rctx.inlineTasks, inlineTask{
+			handler: handler,
+			data:    data,
+			rt:      rt,
+			rctx:    taskRctx,
+			ctx:     taskCtx,
+		})
+		return goja.Undefined()
+	}))
+
+	_ = queueObj.Set("call", rt.ToValue(func(call goja.FunctionCall) goja.Value {
+		fileName := call.Argument(0).String()
+		data := call.Argument(1).Export()
+		pid := fn.ProjectID
+		pname := rctx.ProjectName
+
+		// queue.call is safe to background: dispatchHookInner calls syncRegistry
+		// which builds fresh per-file runtimes — no sharing with the current rt.
+		enqueueTask(pid, fileName, func() {
+			taskRctx := &RunContext{
+				ProjectID:   pid,
+				ProjectName: pname,
+				ReqMethod:   "QUEUE",
+				Doc:         dataToMap(data),
+			}
+			if err := dispatchHookInner(pid, pname, "queue", fileName, taskRctx); err != nil {
+				log.Printf("[queue:%s] call %s error: %v", pid[:8], fileName, err)
+			}
+		})
+		return goja.Undefined()
+	}))
+
+	_ = obj.Set("queue", queueObj)
+
 	// ── ctx.env — placeholder; project env vars could be stored in DB later ──
 	_ = obj.Set("env", rt.NewObject())
 
 	return obj
+}
+
+func dataToMap(v interface{}) map[string]interface{} {
+	if m, ok := v.(map[string]interface{}); ok {
+		return m
+	}
+	return map[string]interface{}{"data": v}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

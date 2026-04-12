@@ -159,7 +159,7 @@ export default function SentinelsDocsPage() {
       {/* Setting up */}
       <Section title="How to set up Sentinels">
         <ol className="list-decimal list-inside space-y-2 text-sm">
-          <li>Open a project in the dashboard.</li>
+          <li>Open the dashboard.</li>
           <li>Click on a collection name to open the collection detail page.</li>
           <li>Switch to the <strong>Settings</strong> tab.</li>
           <li>Scroll to the <strong>Sentinels</strong> section.</li>

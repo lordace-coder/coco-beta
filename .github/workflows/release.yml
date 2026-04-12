@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"   # triggers on v0.1.0, v1.0.0, etc.
+
+permissions:
+  contents: write  # needed to create releases and upload assets
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset_name }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      matrix:
+        include:
+          # ── Linux amd64 — native CGO on ubuntu runner ─────────────────────
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            asset_name: cocobase-linux-amd64
+            cc: gcc
+
+          # ── Linux arm64 — cross-compile with aarch64 gcc ──────────────────
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            asset_name: cocobase-linux-arm64
+            cc: aarch64-linux-gnu-gcc
+
+          # ── macOS amd64 ───────────────────────────────────────────────────
+          - runner: macos-latest
+            goos: darwin
+            goarch: amd64
+            asset_name: cocobase-macos-amd64
+            cc: clang
+
+          # ── macOS arm64 (Apple Silicon) ───────────────────────────────────
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            asset_name: cocobase-macos-arm64
+            cc: clang
+
+          # ── Windows amd64 ─────────────────────────────────────────────────
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+            asset_name: cocobase-windows-amd64.exe
+            cc: gcc   # MinGW-w64 is pre-installed on windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Install arm64 cross-compiler on Linux (only needed for linux-arm64)
+      - name: Install arm64 cross-compiler
+        if: matrix.goarch == 'arm64' && matrix.goos == 'linux'
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build dashboard
+        shell: bash
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build binary (Unix)
+        if: matrix.goos != 'windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+          CC: ${{ matrix.cc }}
+        run: |
+          go build \
+            -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+            -o ${{ matrix.asset_name }} \
+            ./cmd/cocobase
+
+      - name: Build binary (Windows)
+        if: matrix.goos == 'windows'
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o ${{ matrix.asset_name }} ./cmd/cocobase
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.asset_name }}
+          generate_release_notes: true

@@ -12,10 +12,17 @@ import (
 const maxStoredLogs = 20
 
 // Execute runs a function, records its result in the DB log, and returns any error.
+// It always reads code from disk first (./functions/<projectID>/<name>.js),
+// falling back to the inline code stored in the database if the file is missing.
 func Execute(fn *models.Function, rctx *RunContext) (err error) {
 	if !fn.Enabled {
 		return fmt.Errorf("function %q is disabled", fn.Name)
 	}
+
+	// Load code from file — disk is the source of truth; DB code is the fallback.
+	// We also record the file's mod time so the compile cache busts automatically
+	// whenever the user saves their editor — no server restart needed.
+	fn.Code, fn.UpdatedAt = ReadFunctionCodeWithMtime(fn.ProjectID, fn.Name, fn.Code, fn.UpdatedAt)
 
 	timeout := time.Duration(fn.Timeout) * time.Second
 	if timeout <= 0 {

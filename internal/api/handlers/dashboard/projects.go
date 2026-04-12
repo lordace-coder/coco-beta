@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
+	fnservice "github.com/patrick/cocobase/internal/services/functions"
 	"gorm.io/gorm"
 )
 
@@ -40,6 +41,11 @@ func CreateProject(c *fiber.Ctx) error {
 	if err := database.DB.Create(&project).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create project"})
 	}
+
+	// Scaffold the functions directory, type declarations, and sample function.
+	// Must run synchronously — the project row must be committed before RegisterSampleInDB inserts.
+	fnservice.EnsureProjectFunctionsDir(project.ID, project.Name)
+
 	return c.Status(fiber.StatusCreated).JSON(project)
 }
 
@@ -115,6 +121,42 @@ func RegenAPIKey(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to regenerate key"})
 	}
 	return c.JSON(fiber.Map{"api_key": newKey})
+}
+
+// GetInstance handles GET /_/api/instance — returns the single default project.
+// Cocobase is a single-instance BaaS; there is always exactly one project.
+func GetInstance(c *fiber.Ctx) error {
+	project, err := getOrCreateDefaultProject()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to load instance"})
+	}
+	return c.JSON(project)
+}
+
+// getOrCreateDefaultProject returns the first project, creating it if none exists.
+func getOrCreateDefaultProject() (*models.Project, error) {
+	var project models.Project
+	if err := database.DB.Order("created_at asc").First(&project).Error; err == nil {
+		return &project, nil
+	}
+	// None exists — create the default instance project
+	project = models.Project{
+		Name:   "default",
+		UserID: "admin",
+		Active: true,
+	}
+	if err := database.DB.Create(&project).Error; err != nil {
+		return nil, err
+	}
+	fnservice.EnsureProjectFunctionsDir(project.ID, project.Name)
+	return &project, nil
+}
+
+// EnsureDefaultProject is called at startup to guarantee the project row exists.
+func EnsureDefaultProject() {
+	if _, err := getOrCreateDefaultProject(); err != nil {
+		return
+	}
 }
 
 func getProjectByID(id string) (*models.Project, error) {

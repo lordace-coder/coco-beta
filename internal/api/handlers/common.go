@@ -16,6 +16,12 @@ func init() {
 	permChecker = services.NewPermissionChecker()
 }
 
+// InvalidateCollectionCache clears all cached collection lookups for a project/identifier pair.
+// Call this after any dashboard mutation that changes collection settings (permissions, sentinels, etc.)
+func InvalidateCollectionCache(projectID, colID string) {
+	collectionCache.Delete("col:" + projectID + ":" + colID)
+}
+
 // InitHandlerServices initializes handler services after database connection
 // This should be called from main() after database is connected
 func InitHandlerServices() {

@@ -7,9 +7,12 @@ import (
 	"github.com/patrick/cocobase/internal/models"
 )
 
-// DispatchHook runs all enabled hook functions for the given event/collection.
-// For "before" hooks: if any function calls ctx.cancel(), returns (true, message).
-// For "after" hooks: runs in background goroutines, return value is always (false, "").
+// DispatchHook runs all hook handlers registered in functions.js for the given
+// lifecycle event and collection.
+//
+// For "before" hooks: runs synchronously; if any handler calls ctx.cancel()
+// returns (true, cancelMessage).
+// For "after" hooks: runs in a background goroutine, always returns (false, "").
 func DispatchHook(
 	event models.HookEvent,
 	projectID string,
@@ -19,75 +22,58 @@ func DispatchHook(
 	broadcast func(string, interface{}),
 ) (cancelled bool, cancelMsg string) {
 
-	var fns []models.Function
-	database.DB.Where(
-		"project_id = ? AND trigger_type = ? AND enabled = true",
-		projectID, models.TriggerHook,
-	).Find(&fns)
-
-	if len(fns) == 0 {
+	// Look up the project name for the registry (needed to load functions.js)
+	var project models.Project
+	if err := database.DB.Select("id, name").First(&project, "id = ?", projectID).Error; err != nil {
 		return false, ""
 	}
 
 	colName := ""
-	colID := ""
 	if collection != nil {
 		colName = collection.Name
-		colID = collection.ID
 	}
 
 	isBefore := event == models.HookBeforeCreate ||
 		event == models.HookBeforeUpdate ||
 		event == models.HookBeforeDelete
 
-	for i := range fns {
-		fn := &fns[i]
-		cfg := fn.TriggerConfig
-
-		// Filter: must match event
-		if cfg.Event != string(event) {
-			continue
-		}
-		// Filter: must match collection (empty = all collections)
-		if cfg.Collection != "" && cfg.Collection != colName && cfg.Collection != colID {
-			continue
-		}
-
-		rctx := &RunContext{
-			ProjectID: projectID,
-			Doc:       doc,
-			User:      user,
-			Broadcast: broadcast,
-			ReqMethod: string(event),
-		}
-
-		if isBefore {
-			// Run synchronously so we can cancel
-			if err := Execute(fn, rctx); err != nil {
-				log.Printf("hook %s error: %v", fn.Name, err)
-			}
-			if rctx.Cancelled {
-				return true, rctx.CancelMessage
-			}
-		} else {
-			// After hooks: fire-and-forget
-			fnCopy := *fn
-			rctxCopy := &RunContext{
-				ProjectID: projectID,
-				Doc:       copyMap(doc),
-				User:      user,
-				Broadcast: broadcast,
-				ReqMethod: string(event),
-			}
-			go func() {
-				if err := Execute(&fnCopy, rctxCopy); err != nil {
-					log.Printf("after-hook %s error: %v", fnCopy.Name, err)
-				}
-			}()
-		}
+	rctx := &RunContext{
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		Doc:         doc,
+		User:        user,
+		Broadcast:   broadcast,
+		ReqMethod:   string(event),
 	}
 
+	if isBefore {
+		if err := dispatchHookSync(projectID, project.Name, string(event), colName, rctx); err != nil {
+			log.Printf("hook %s/%s error: %v", event, colName, err)
+		}
+		return rctx.Cancelled, rctx.CancelMessage
+	}
+
+	// After hooks: fire-and-forget
+	rctxCopy := &RunContext{
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		Doc:         copyMap(doc),
+		User:        user,
+		Broadcast:   broadcast,
+		ReqMethod:   string(event),
+	}
+	go func() {
+		if err := dispatchHookSync(projectID, project.Name, string(event), colName, rctxCopy); err != nil {
+			log.Printf("after-hook %s/%s error: %v", event, colName, err)
+		}
+	}()
+
 	return false, ""
+}
+
+// dispatchHookSync calls all matching handlers in the registry synchronously.
+func dispatchHookSync(projectID, projectName, event, collection string, rctx *RunContext) error {
+	return dispatchHookInner(projectID, projectName, event, collection, rctx)
 }
 
 func copyMap(m map[string]interface{}) map[string]interface{} {

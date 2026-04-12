@@ -37,6 +37,9 @@ func SetupDashboardRoutes(app *fiber.App) {
 	// Available integrations catalogue
 	protected.Get("/integrations", dashboard.ListIntegrations)
 
+	// Single-instance endpoint — returns (or creates) the one default project
+	protected.Get("/instance", dashboard.GetInstance)
+
 	// Projects
 	projects := protected.Group("/projects")
 	projects.Get("/", dashboard.ListProjects)
@@ -81,14 +84,14 @@ func SetupDashboardRoutes(app *fiber.App) {
 	projects.Put("/:id/integrations/:integrationName", dashboard.UpsertProjectIntegration)
 	projects.Delete("/:id/integrations/:piId", dashboard.DeleteProjectIntegration)
 
-	// Project → cloud functions
-	projects.Get("/:id/functions", dashboard.ListFunctions)
-	projects.Post("/:id/functions", dashboard.CreateFunction)
-	projects.Get("/:id/functions/routes", dashboard.ListHTTPRoutes)
-	projects.Get("/:id/functions/:fnId", dashboard.GetFunction)
-	projects.Patch("/:id/functions/:fnId", dashboard.UpdateFunction)
-	projects.Delete("/:id/functions/:fnId", dashboard.DeleteFunction)
-	projects.Post("/:id/functions/:fnId/run", dashboard.RunFunction)
+	// Project → cloud functions (multi-file model)
+	projects.Get("/:id/functions", dashboard.ListFunctionFiles)
+	projects.Post("/:id/functions", dashboard.CreateFunctionFile)
+	projects.Get("/:id/functions/crons", dashboard.GetCronSchedule)
+	projects.Get("/:id/functions/:name", dashboard.GetFunctionFile)
+	projects.Put("/:id/functions/:name", dashboard.SaveFunctionFile)
+	projects.Delete("/:id/functions/:name", dashboard.DeleteFunctionFileHandler)
+	projects.Post("/:id/functions/:name/run", dashboard.RunFunctionFile)
 
 	// ── Serve embedded React SPA at /_/* ──────────────────────────────────────
 	app.Get("/_", serveSPA)

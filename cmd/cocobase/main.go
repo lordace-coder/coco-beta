@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -259,17 +258,36 @@ func runServe() {
 
 	serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
 	portOverride := serveFlags.String("port", "", "Override PORT")
-	_ = serveFlags.String("env", ".env", "Path to .env file") // godotenv is loaded in config
+	envFile := serveFlags.String("env", "", "Path to a custom .env file")
 
 	args := os.Args[1:]
 	if len(args) > 0 && args[0] == "serve" {
 		args = args[1:]
 	}
+
+	// Support positional port: `cocobase serve 4000` or `cocobase 4000`
+	// Pull out any leading bare integer before flag.Parse sees it.
+	var positionalPort string
+	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
+		positionalPort = args[0]
+		args = args[1:]
+	}
 	serveFlags.Parse(args)
 
+	// Load custom .env file before LoadConfig reads env vars
+	if *envFile != "" {
+		if err := config.LoadEnvFile(*envFile); err != nil {
+			log.Printf("Warning: could not load env file %q: %v", *envFile, err)
+		}
+	}
+
 	cfg := config.LoadConfig()
+
+	// Port priority: -port flag > positional arg > env/config
 	if *portOverride != "" {
 		cfg.Port = *portOverride
+	} else if positionalPort != "" {
+		cfg.Port = positionalPort
 	}
 
 	// Default to a local SQLite file when no DATABASE_URL is set.
@@ -297,6 +315,16 @@ func runServe() {
 	}
 
 	dashhandlers.LoadDashboardConfigIntoAppConfig()
+
+	// Guarantee the single default project exists before anything else.
+	dashhandlers.EnsureDefaultProject()
+
+	// Scaffold functions dirs for existing projects (idempotent, synchronous).
+	var projects []models.Project
+	database.DB.Find(&projects)
+	for _, p := range projects {
+		fnservice.EnsureProjectFunctionsDir(p.ID, p.Name)
+	}
 
 	// Start cron scheduler (built-in system jobs + user-defined cron functions)
 	fnservice.StartScheduler()
@@ -349,14 +377,6 @@ func runServe() {
 
 	log.Printf("🚀 Cocobase v0.1.0 starting on port %s in %s mode", cfg.Port, cfg.Environment)
 	log.Printf("📊 Dashboard: %s", dashURL)
-
-	// Open the browser after a short delay so the server is ready to accept connections.
-	go func() {
-		time.Sleep(800 * time.Millisecond)
-		if err := openBrowser(dashURL); err != nil {
-			log.Printf("ℹ️  Could not open browser automatically: %v", err)
-		}
-	}()
 
 	log.Fatal(app.Listen(port))
 }

@@ -104,6 +104,12 @@ type Config struct {
 
 var AppConfig *Config
 
+// LoadEnvFile loads a specific .env file into the environment.
+// Call this before LoadConfig to override the default .env search.
+func LoadEnvFile(path string) error {
+	return godotenv.Load(path)
+}
+
 // LoadConfig loads environment variables and initializes the config
 func LoadConfig() *Config {
 	// Load .env file — try current dir, then up two levels (for air running from bin/)

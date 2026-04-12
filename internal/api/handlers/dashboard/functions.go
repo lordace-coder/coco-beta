@@ -4,208 +4,189 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
-	"github.com/patrick/cocobase/internal/database"
-	"github.com/patrick/cocobase/internal/models"
 	fn "github.com/patrick/cocobase/internal/services/functions"
 )
 
-// ListFunctions GET /_/api/projects/:id/functions
-func ListFunctions(c *fiber.Ctx) error {
+// ListFunctionFiles GET /_/api/projects/:id/functions
+// Returns all .js function files for a project.
+func ListFunctionFiles(c *fiber.Ctx) error {
 	projectID := c.Params("id")
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 
-	var fns []models.Function
-	database.DB.Where("project_id = ?", projectID).Order("created_at desc").Find(&fns)
-
-	// Include cron timing info
-	cronEntries := fn.GetCronEntries(projectID)
-	cronMap := map[string]fn.CronEntry{}
-	for _, e := range cronEntries {
-		cronMap[e.FunctionID] = e
+	names := fn.ListFunctionFiles(projectID)
+	type fileInfo struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
 	}
-
-	type fnResponse struct {
-		models.Function
-		NextRun *time.Time `json:"next_run,omitempty"`
-		PrevRun *time.Time `json:"prev_run,omitempty"`
-	}
-
-	result := make([]fnResponse, len(fns))
-	for i, f := range fns {
-		r := fnResponse{Function: f}
-		if e, ok := cronMap[f.ID]; ok {
-			if !e.Next.IsZero() {
-				r.NextRun = &e.Next
-			}
-			if !e.Prev.IsZero() {
-				r.PrevRun = &e.Prev
-			}
+	files := make([]fileInfo, len(names))
+	for i, name := range names {
+		files[i] = fileInfo{
+			Name: name,
+			Path: fn.FunctionFilePath(projectID, name),
 		}
-		result[i] = r
 	}
-
-	return c.JSON(fiber.Map{"data": result, "total": len(result)})
+	return c.JSON(fiber.Map{"data": files, "total": len(files)})
 }
 
-// GetFunction GET /_/api/projects/:id/functions/:fnId
-func GetFunction(c *fiber.Ctx) error {
+// GetFunctionFile GET /_/api/projects/:id/functions/:name
+// Returns the code of a single function file.
+func GetFunctionFile(c *fiber.Ctx) error {
 	projectID := c.Params("id")
-	fnID := c.Params("fnId")
-
-	var f models.Function
-	if err := database.DB.Where("id = ? AND project_id = ?", fnID, projectID).First(&f).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Function not found"})
-	}
-	return c.JSON(f)
-}
-
-// CreateFunction POST /_/api/projects/:id/functions
-func CreateFunction(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	name := c.Params("name")
 	if _, err := getProjectByID(projectID); err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
+	}
+
+	code, mtime := fn.ReadFunctionFile(projectID, name)
+	if code == "" && mtime.IsZero() {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Function file not found"})
+	}
+	return c.JSON(fiber.Map{
+		"name":     name,
+		"code":     code,
+		"path":     fn.FunctionFilePath(projectID, name),
+		"modified": mtime,
+	})
+}
+
+// SaveFunctionFile PUT /_/api/projects/:id/functions/:name
+// Writes code to a function file and invalidates the registry.
+func SaveFunctionFile(c *fiber.Ctx) error {
+	projectID := c.Params("id")
+	name := c.Params("name")
+	project, err := getProjectByID(projectID)
+	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 
 	var req struct {
-		Name          string              `json:"name"`
-		Code          string              `json:"code"`
-		TriggerType   models.TriggerType  `json:"trigger_type"`
-		TriggerConfig models.TriggerConfig `json:"trigger_config"`
-		Enabled       *bool               `json:"enabled"`
-		Timeout       int                 `json:"timeout"`
+		Code string `json:"code"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
 	}
-	if req.Name == "" {
+
+	if err := fn.WriteFunctionCode(projectID, name, req.Code); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to write file"})
+	}
+
+	fn.InvalidateRegistry(projectID)
+	fn.ReloadProjectCrons(projectID, project.Name)
+
+	return c.JSON(fiber.Map{
+		"name":     name,
+		"path":     fn.FunctionFilePath(projectID, name),
+		"modified": time.Now(),
+	})
+}
+
+// CreateFunctionFile POST /_/api/projects/:id/functions
+// Creates a new named function file with a starter stub.
+func CreateFunctionFile(c *fiber.Ctx) error {
+	projectID := c.Params("id")
+	project, err := getProjectByID(projectID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
+	}
+
+	var req struct {
+		Name string `json:"name"`
+		Code string `json:"code"` // optional — uses starter stub if empty
+	}
+	if err := c.BodyParser(&req); err != nil || req.Name == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "name is required"})
 	}
-	if req.TriggerType == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "trigger_type is required"})
+
+	// Don't overwrite an existing file
+	existing, _ := fn.ReadFunctionFile(projectID, req.Name)
+	if existing != "" {
+		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "A function with that name already exists"})
 	}
 
-	enabled := true
-	if req.Enabled != nil {
-		enabled = *req.Enabled
-	}
-	timeout := req.Timeout
-	if timeout <= 0 {
-		timeout = 10
+	code := req.Code
+	if code == "" {
+		code = starterStub(req.Name, project.ID)
 	}
 
-	f := models.Function{
-		ID:            uuid.New().String(),
-		ProjectID:     projectID,
-		Name:          req.Name,
-		Code:          req.Code,
-		TriggerType:   req.TriggerType,
-		TriggerConfig: req.TriggerConfig,
-		Enabled:       enabled,
-		Timeout:       timeout,
+	if err := fn.WriteFunctionCode(projectID, req.Name, code); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create file"})
 	}
 
-	if err := database.DB.Create(&f).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create function"})
-	}
+	fn.InvalidateRegistry(projectID)
 
-	fn.InvalidatePool(projectID)
-	if f.TriggerType == models.TriggerCron {
-		fn.ReloadCronFunction(&f)
-	}
-
-	return c.Status(fiber.StatusCreated).JSON(f)
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"name": req.Name,
+		"path": fn.FunctionFilePath(projectID, req.Name),
+		"code": code,
+	})
 }
 
-// UpdateFunction PATCH /_/api/projects/:id/functions/:fnId
-func UpdateFunction(c *fiber.Ctx) error {
+// DeleteFunctionFile DELETE /_/api/projects/:id/functions/:name
+func DeleteFunctionFileHandler(c *fiber.Ctx) error {
 	projectID := c.Params("id")
-	fnID := c.Params("fnId")
+	name := c.Params("name")
+	project, err := getProjectByID(projectID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
+	}
 
-	var f models.Function
-	if err := database.DB.Where("id = ? AND project_id = ?", fnID, projectID).First(&f).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Function not found"})
+	fn.DeleteFunctionFile(projectID, name)
+	fn.InvalidateRegistry(projectID)
+	fn.ReloadProjectCrons(projectID, project.Name)
+
+	return c.JSON(fiber.Map{"message": "deleted"})
+}
+
+// RunFunctionFile POST /_/api/projects/:id/functions/:name/run
+// Test-runs an HTTP route from a specific file against a given method+path.
+func RunFunctionFile(c *fiber.Ctx) error {
+	projectID := c.Params("id")
+	project, err := getProjectByID(projectID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 
 	var req struct {
-		Name          *string              `json:"name"`
-		Code          *string              `json:"code"`
-		TriggerConfig *models.TriggerConfig `json:"trigger_config"`
-		Enabled       *bool                `json:"enabled"`
-		Timeout       *int                 `json:"timeout"`
+		Method string            `json:"method"`
+		Path   string            `json:"path"`
+		Body   string            `json:"body"`
+		Query  map[string]string `json:"query"`
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
 	}
-
-	if req.Name != nil {
-		f.Name = *req.Name
+	if req.Method == "" {
+		req.Method = "GET"
 	}
-	if req.Code != nil {
-		f.Code = *req.Code
-	}
-	if req.TriggerConfig != nil {
-		f.TriggerConfig = *req.TriggerConfig
-	}
-	if req.Enabled != nil {
-		f.Enabled = *req.Enabled
-	}
-	if req.Timeout != nil && *req.Timeout > 0 {
-		f.Timeout = *req.Timeout
-	}
-
-	if err := database.DB.Save(&f).Error; err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update function"})
-	}
-
-	fn.InvalidatePool(projectID)
-	fn.ReloadCronFunction(&f)
-
-	return c.JSON(f)
-}
-
-// DeleteFunction DELETE /_/api/projects/:id/functions/:fnId
-func DeleteFunction(c *fiber.Ctx) error {
-	projectID := c.Params("id")
-	fnID := c.Params("fnId")
-
-	var f models.Function
-	if err := database.DB.Where("id = ? AND project_id = ?", fnID, projectID).First(&f).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Function not found"})
-	}
-
-	fn.UnscheduleCronFunction(fnID)
-	fn.InvalidatePool(projectID)
-	database.DB.Delete(&f)
-
-	return c.JSON(fiber.Map{"message": "Function deleted"})
-}
-
-// RunFunction POST /_/api/projects/:id/functions/:fnId/run — manual trigger from dashboard
-func RunFunction(c *fiber.Ctx) error {
-	projectID := c.Params("id")
-	fnID := c.Params("fnId")
-
-	var f models.Function
-	if err := database.DB.Where("id = ? AND project_id = ?", fnID, projectID).First(&f).Error; err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Function not found"})
+	if req.Path == "" {
+		req.Path = "/"
 	}
 
 	rctx := &fn.RunContext{
-		ProjectID: projectID,
-		ReqMethod: "MANUAL",
+		ProjectID:   projectID,
+		ProjectName: project.Name,
+		ReqMethod:   req.Method,
+		ReqPath:     req.Path,
+		ReqBody:     req.Body,
+		ReqQuery:    req.Query,
+		ReqHeaders:  map[string]string{},
 	}
 
 	start := time.Now()
-	runErr := fn.Execute(&f, rctx)
+	responded, runErr := fn.DispatchHTTP(projectID, project.Name, rctx)
 	duration := time.Since(start).Milliseconds()
 
 	result := fiber.Map{
 		"duration_ms": duration,
 		"output":      rctx.LogOutput.String(),
+		"responded":   responded,
 		"success":     runErr == nil,
+	}
+	if responded {
+		result["status"] = rctx.ResponseStatus
+		result["body"] = rctx.ResponseBody
 	}
 	if runErr != nil {
 		result["error"] = runErr.Error()
@@ -213,39 +194,23 @@ func RunFunction(c *fiber.Ctx) error {
 	return c.JSON(result)
 }
 
-// ListHTTPRoutes GET /_/api/projects/:id/functions/routes — read-only route list
-func ListHTTPRoutes(c *fiber.Ctx) error {
+// GetCronSchedule GET /_/api/projects/:id/functions/crons
+func GetCronSchedule(c *fiber.Ctx) error {
 	projectID := c.Params("id")
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
+	entries := fn.GetCronEntries(projectID)
+	return c.JSON(fiber.Map{"data": entries, "total": len(entries)})
+}
 
-	var fns []models.Function
-	database.DB.Where("project_id = ? AND trigger_type = ?", projectID, models.TriggerHTTP).
-		Order("name").Find(&fns)
-
-	type route struct {
-		FunctionID string `json:"function_id"`
-		Name       string `json:"name"`
-		Method     string `json:"method"`
-		Path       string `json:"path"`
-		Enabled    bool   `json:"enabled"`
-	}
-
-	routes := make([]route, 0, len(fns))
-	for _, f := range fns {
-		method := f.TriggerConfig.Method
-		if method == "" {
-			method = "ANY"
-		}
-		routes = append(routes, route{
-			FunctionID: f.ID,
-			Name:       f.Name,
-			Method:     method,
-			Path:       "/fn" + f.TriggerConfig.Path,
-			Enabled:    f.Enabled,
-		})
-	}
-
-	return c.JSON(fiber.Map{"data": routes, "total": len(routes)})
+// starterStub returns a sensible default for a new function file.
+func starterStub(name, projectID string) string {
+	return "// " + name + ".js\n" +
+		"// URL: /functions/" + projectID + "/func/" + name + "\n\n" +
+		"app.get(\"/" + name + "\", (ctx) => {\n" +
+		"  ctx.respond(200, JSON.stringify({ message: \"" + name + " ok\" }), {\n" +
+		"    \"Content-Type\": \"application/json\",\n" +
+		"  });\n" +
+		"});\n"
 }

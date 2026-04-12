@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 const VERSION = "0.1.0";
 
 const navItems = [
-  { label: "Overview", href: "/" },
-  { label: "Projects", href: "/projects" },
+  { label: "Dashboard", href: "/" },
   { label: "Settings", href: "/settings" },
   { label: "Environment", href: "/env-setup" },
   { label: "Sentinels", href: "/sentinels" },

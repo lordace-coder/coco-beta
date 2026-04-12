@@ -33,6 +33,11 @@ export const authApi = {
   me: () => api.get<Admin>("/auth/me"),
 };
 
+// ── Instance (single-project mode) ───────────────────────────────────────────
+export const instanceApi = {
+  get: () => api.get<Project>("/instance"),
+};
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 export const projectsApi = {
   list: () => api.get<{ data: Project[]; total: number }>("/projects"),
@@ -100,8 +105,8 @@ export const configApi = {
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 export const logsApi = {
-  list: (projectId: string, params?: { limit?: number; offset?: number }) =>
-    api.get<PaginatedResponse<ActivityLog>>(`/projects/${projectId}/logs`, { params }),
+  list: (projectId: string, params?: { limit?: number }) =>
+    api.get<{ data: string[]; total: number }>(`/projects/${projectId}/logs`, { params }),
 };
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -110,23 +115,23 @@ export const healthApi = {
 };
 
 // ── Functions ─────────────────────────────────────────────────────────────────
+export type RunResult = { success: boolean; responded: boolean; output: string; duration_ms: number; status?: number; body?: string; error?: string };
+
 export const functionsApi = {
   list: (projectId: string) =>
-    api.get<{ data: CloudFunction[]; total: number }>(`/projects/${projectId}/functions`),
-  get: (projectId: string, fnId: string) =>
-    api.get<CloudFunction>(`/projects/${projectId}/functions/${fnId}`),
-  create: (projectId: string, data: CloudFunctionCreate) =>
-    api.post<CloudFunction>(`/projects/${projectId}/functions`, data),
-  update: (projectId: string, fnId: string, data: Partial<CloudFunctionCreate>) =>
-    api.patch<CloudFunction>(`/projects/${projectId}/functions/${fnId}`, data),
-  delete: (projectId: string, fnId: string) =>
-    api.delete(`/projects/${projectId}/functions/${fnId}`),
-  run: (projectId: string, fnId: string) =>
-    api.post<{ success: boolean; output: string; duration_ms: number; error?: string }>(
-      `/projects/${projectId}/functions/${fnId}/run`
-    ),
-  listRoutes: (projectId: string) =>
-    api.get<{ data: HttpRoute[]; total: number }>(`/projects/${projectId}/functions/routes`),
+    api.get<{ data: FunctionFile[]; total: number }>(`/projects/${projectId}/functions`),
+  create: (projectId: string, name: string, code?: string) =>
+    api.post<{ name: string; path: string; code: string }>(`/projects/${projectId}/functions`, { name, code }),
+  get: (projectId: string, name: string) =>
+    api.get<{ name: string; code: string; path: string; modified: string }>(`/projects/${projectId}/functions/${name}`),
+  save: (projectId: string, name: string, code: string) =>
+    api.put<{ name: string; path: string; modified: string }>(`/projects/${projectId}/functions/${name}`, { code }),
+  delete: (projectId: string, name: string) =>
+    api.delete(`/projects/${projectId}/functions/${name}`),
+  run: (projectId: string, name: string, data: { method?: string; path?: string; body?: string; query?: Record<string, string> }) =>
+    api.post<RunResult>(`/projects/${projectId}/functions/${name}/run`, data),
+  getCrons: (projectId: string) =>
+    api.get<{ data: CronEntry[]; total: number }>(`/projects/${projectId}/functions/crons`),
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -226,60 +231,16 @@ export interface ActivityLog {
   created_at: string;
 }
 
-export type TriggerType = "http" | "hook" | "cron";
-
-export interface TriggerConfig {
-  // HTTP
-  method?: string;
-  path?: string;
-  // Hook
-  event?: string;
-  collection?: string;
-  // Cron
-  schedule?: string;
-}
-
-export interface FunctionLog {
-  run_at: string;
-  duration_ms: number;
-  success: boolean;
-  output: string;
-  error?: string;
-}
-
-export interface CloudFunction {
-  id: string;
-  project_id: string;
+export interface FunctionFile {
   name: string;
-  code: string;
-  trigger_type: TriggerType;
-  trigger_config: TriggerConfig;
-  enabled: boolean;
-  timeout: number;
-  logs: FunctionLog[];
-  last_run_at?: string;
-  last_error?: string;
-  next_run?: string;
-  prev_run?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CloudFunctionCreate {
-  name: string;
-  code: string;
-  trigger_type: TriggerType;
-  trigger_config: TriggerConfig;
-  enabled?: boolean;
-  timeout?: number;
-}
-
-export interface HttpRoute {
-  function_id: string;
-  name: string;
-  method: string;
   path: string;
-  enabled: boolean;
+}
+
+export interface CronEntry {
+  function_id: string;
+  schedule: string;
+  next_run: string;
+  prev_run: string;
 }
 
 export interface PaginatedResponse<T> {

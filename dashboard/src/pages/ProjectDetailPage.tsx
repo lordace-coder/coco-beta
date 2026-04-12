@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectsApi } from "@/api/client";
+import { useInstance } from "@/hooks/useInstance";
 import { OverviewTab } from "./project/OverviewTab";
 import { ConfigTab } from "./project/ConfigTab";
 import { UsersTab } from "./project/UsersTab";
@@ -13,51 +13,36 @@ import { FunctionsTab } from "./project/FunctionsTab";
 type Tab = "overview" | "settings" | "users" | "collections" | "files" | "logs" | "functions";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "settings", label: "Settings" },
-  { key: "users", label: "Users" },
+  { key: "overview", label: "API" },
   { key: "collections", label: "Collections" },
-  { key: "files", label: "Files" },
+  { key: "users", label: "Users" },
   { key: "functions", label: "Functions" },
+  { key: "files", label: "Files" },
   { key: "logs", label: "Logs" },
+  { key: "settings", label: "Settings" },
 ];
 
 export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const projectId = useInstance();
   const [tab, setTab] = useState<Tab>("overview");
   const qc = useQueryClient();
 
   const { data: project, isLoading } = useQuery({
-    queryKey: ["project", id],
-    queryFn: () => projectsApi.get(id!).then((r) => r.data),
-    enabled: !!id,
+    queryKey: ["project", projectId],
+    queryFn: () => projectsApi.get(projectId).then((r) => r.data),
+    enabled: !!projectId,
   });
 
   const regenMutation = useMutation({
-    mutationFn: () => projectsApi.regenKey(id!),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["project", id] }),
+    mutationFn: () => projectsApi.regenKey(projectId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["project", projectId] }),
   });
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
-  if (!project) return <div className="p-6 text-sm text-muted-foreground">Project not found</div>;
+  if (isLoading || !projectId) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>;
+  if (!project) return <div className="p-6 text-sm text-muted-foreground">Loading instance…</div>;
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link to="/projects" className="hover:underline">Projects</Link>
-        <span>/</span>
-        <span className="text-foreground font-medium">{project.name}</span>
-      </div>
-
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold">{project.name}</h1>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${project.active ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
-          {project.active ? "active" : "inactive"}
-        </span>
-      </div>
-
       {/* Tab bar */}
       <div className="flex gap-1 border-b overflow-x-auto">
         {TABS.map((t) => (
@@ -77,11 +62,11 @@ export default function ProjectDetailPage() {
         }} />
       )}
       {tab === "settings" && <ConfigTab project={project} />}
-      {tab === "users" && <UsersTab projectId={id!} />}
-      {tab === "collections" && <CollectionsTab projectId={id!} />}
-      {tab === "files" && <FilesTab projectId={id!} />}
-      {tab === "functions" && <FunctionsTab projectId={id!} />}
-      {tab === "logs" && <LogsTab projectId={id!} />}
+      {tab === "users" && <UsersTab />}
+      {tab === "collections" && <CollectionsTab />}
+      {tab === "files" && <FilesTab />}
+      {tab === "functions" && <FunctionsTab />}
+      {tab === "logs" && <LogsTab />}
     </div>
   );
 }
