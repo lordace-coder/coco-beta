@@ -20,33 +20,26 @@ jobs:
             goos: linux
             goarch: amd64
             asset_name: cocobase-linux-amd64
-            cc: musl-gcc
-            static: true
 
           - runner: ubuntu-latest
             goos: linux
             goarch: arm64
             asset_name: cocobase-linux-arm64
-            cc: aarch64-linux-gnu-gcc
-            static: false
 
           - runner: macos-latest
             goos: darwin
             goarch: amd64
             asset_name: cocobase-macos-amd64
-            cc: clang
 
           - runner: macos-latest
             goos: darwin
             goarch: arm64
             asset_name: cocobase-macos-arm64
-            cc: clang
 
           - runner: windows-latest
             goos: windows
             goarch: amd64
             asset_name: cocobase-windows-amd64.exe
-            cc: gcc
 
     steps:
       - name: Checkout
@@ -55,18 +48,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22.x"   # stable release that supports all runners
+          go-version: "1.22.x"
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-
-      - name: Install Linux build deps
-        if: matrix.goos == 'linux'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
 
       - name: Build dashboard
         shell: bash
@@ -81,15 +68,11 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: "1"
-          CC: ${{ matrix.cc }}
+          CGO_ENABLED: "0"
         run: |
-          LDFLAGS="-s -w -X main.Version=${{ github.ref_name }}"
-          if [ "${{ matrix.static }}" = "true" ]; then
-            LDFLAGS="$LDFLAGS -extldflags '-static'"
-          fi
+          mkdir -p dist
           go build \
-            -ldflags="$LDFLAGS" \
+            -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
             -o dist/${{ matrix.asset_name }} \
             ./cmd/cocobase
           ls -lh dist/
@@ -100,7 +83,7 @@ jobs:
         env:
           GOOS: windows
           GOARCH: amd64
-          CGO_ENABLED: "1"
+          CGO_ENABLED: "0"
         run: |
           mkdir dist
           go build -ldflags="-s -w -X main.Version=${{ github.ref_name }}" -o dist\${{ matrix.asset_name }} .\cmd\cocobase

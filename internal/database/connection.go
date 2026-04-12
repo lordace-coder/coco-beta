@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/patrick/cocobase/internal/models"
+	glebarez "github.com/glebarez/sqlite"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -43,7 +43,7 @@ func Connect(databaseURL string, debug bool) error {
 	if isSQLite {
 		// Strip sqlite:// prefix if present
 		filePath := strings.TrimPrefix(databaseURL, "sqlite://")
-		DB, err = gorm.Open(sqlite.Open(filePath), gormCfg)
+		DB, err = gorm.Open(glebarez.Open(filePath), gormCfg)
 	} else {
 		DB, err = gorm.Open(postgres.Open(databaseURL), gormCfg)
 	}
