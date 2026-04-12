@@ -20,13 +20,15 @@ jobs:
             goos: linux
             goarch: amd64
             asset_name: cocobase-linux-amd64
-            cc: gcc
+            cc: musl-gcc
+            static: true
 
           - runner: ubuntu-latest
             goos: linux
             goarch: arm64
             asset_name: cocobase-linux-arm64
             cc: aarch64-linux-gnu-gcc
+            static: false
 
           - runner: macos-latest
             goos: darwin
@@ -60,9 +62,11 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install arm64 cross-compiler
-        if: matrix.goarch == 'arm64' && matrix.goos == 'linux'
-        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Install Linux build deps
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
 
       - name: Build dashboard
         shell: bash
@@ -80,8 +84,12 @@ jobs:
           CGO_ENABLED: "1"
           CC: ${{ matrix.cc }}
         run: |
+          LDFLAGS="-s -w -X main.Version=${{ github.ref_name }}"
+          if [ "${{ matrix.static }}" = "true" ]; then
+            LDFLAGS="$LDFLAGS -extldflags '-static'"
+          fi
           go build \
-            -ldflags="-s -w -X main.Version=${{ github.ref_name }}" \
+            -ldflags="$LDFLAGS" \
             -o dist/${{ matrix.asset_name }} \
             ./cmd/cocobase
           ls -lh dist/
