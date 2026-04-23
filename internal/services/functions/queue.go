@@ -60,7 +60,7 @@ func runWorker(q *projectQueue) {
 			go func() {
 				defer func() {
 					if r := recover(); r != nil {
-						log.Printf("[queue:%s] panic in %s: %v", t.projectID[:8], t.label, r)
+						log.Printf("[queue:%s] panic in %s: %v", safePrefix(t.projectID), t.label, r)
 					}
 					close(done)
 				}()
@@ -69,7 +69,7 @@ func runWorker(q *projectQueue) {
 			select {
 			case <-done:
 			case <-time.After(queueTaskTimeout):
-				log.Printf("[queue:%s] task %s timed out after %s", t.projectID[:8], t.label, queueTaskTimeout)
+				log.Printf("[queue:%s] task %s timed out after %s", safePrefix(t.projectID), t.label, queueTaskTimeout)
 			}
 		}()
 	}
@@ -83,6 +83,6 @@ func enqueueTask(projectID, label string, run func()) {
 	select {
 	case q.ch <- t:
 	default:
-		log.Printf("[queue:%s] queue full (%d tasks), dropping task %s", projectID[:8], queueMaxTasks, label)
+		log.Printf("[queue:%s] queue full (%d tasks), dropping task %s", safePrefix(projectID), queueMaxTasks, label)
 	}
 }

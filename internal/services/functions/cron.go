@@ -127,14 +127,14 @@ func loadProjectCronFunctions(projectID, projectName string) {
 			RunCronJob(pid, pname, idx)
 		})
 		if err != nil {
-			log.Printf("[cron:%s] invalid schedule %q at index %d: %v", projectID[:8], job.schedule, idx, err)
+			log.Printf("[cron:%s] invalid schedule %q at index %d: %v", safePrefix(projectID), job.schedule, idx, err)
 			continue
 		}
 		projectCronEntries[projectID] = append(projectCronEntries[projectID], entryID)
 	}
 
 	if len(jobs) > 0 {
-		log.Printf("[cron:%s] registered %d cron job(s)", projectID[:8], len(jobs))
+		log.Printf("[cron:%s] registered %d cron job(s)", safePrefix(projectID), len(jobs))
 	}
 }
 

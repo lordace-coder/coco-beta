@@ -223,14 +223,80 @@ func loadFile(projectID, projectName, filePath string) (*fileReg, error) {
 	}))
 
 	_ = rt.Set("app", appObj)
-	_ = rt.Set("ctx", rt.NewObject()) // stub during registration
+
+	// ── console object — available during registration and dispatch ───────────
+	consoleObj := rt.NewObject()
+	makeConsoleFn := func(level string) func(goja.FunctionCall) goja.Value {
+		return func(call goja.FunctionCall) goja.Value {
+			parts := make([]string, len(call.Arguments))
+			for i, a := range call.Arguments {
+				parts[i] = fmt.Sprintf("%v", a.Export())
+			}
+			log.Printf("[fn:%s/%s] %s: %s", safePrefix(projectID), fileName, level, strings.Join(parts, " "))
+			return goja.Undefined()
+		}
+	}
+	_ = consoleObj.Set("log", rt.ToValue(makeConsoleFn("log")))
+	_ = consoleObj.Set("warn", rt.ToValue(makeConsoleFn("warn")))
+	_ = consoleObj.Set("error", rt.ToValue(makeConsoleFn("error")))
+	_ = consoleObj.Set("info", rt.ToValue(makeConsoleFn("info")))
+	_ = consoleObj.Set("debug", rt.ToValue(makeConsoleFn("debug")))
+	_ = rt.Set("console", consoleObj)
+
+	// ── ctx stub — provides no-op versions of all ctx methods so top-level
+	// calls in the file body don't crash the registration phase.
+	// Real ctx (with live DB/auth/etc.) is injected per-dispatch in buildCtxForRuntime.
+	ctxStub := rt.NewObject()
+	noop := rt.ToValue(func(call goja.FunctionCall) goja.Value { return goja.Undefined() })
+	noopObj := rt.NewObject()
+	for _, method := range []string{"query", "findOne", "get", "create", "update", "delete", "queryUsers", "findUser"} {
+		_ = noopObj.Set(method, noop)
+	}
+	authStub := rt.NewObject()
+	for _, method := range []string{"createUser", "updateUser", "deleteUser", "getUser", "findUser", "queryUsers"} {
+		_ = authStub.Set(method, noop)
+	}
+	kvStub := rt.NewObject()
+	_ = kvStub.Set("set", noop)
+	_ = kvStub.Set("get", rt.ToValue(func(call goja.FunctionCall) goja.Value { return goja.Null() }))
+	_ = kvStub.Set("delete", noop)
+	queueStub := rt.NewObject()
+	_ = queueStub.Set("add", noop)
+	_ = queueStub.Set("call", noop)
+	reqStub := rt.NewObject()
+	_ = reqStub.Set("method", "")
+	_ = reqStub.Set("path", "")
+	_ = reqStub.Set("headers", rt.NewObject())
+	_ = reqStub.Set("body", "")
+	_ = reqStub.Set("query", rt.NewObject())
+	_ = reqStub.Set("json", rt.ToValue(func(call goja.FunctionCall) goja.Value { return goja.Null() }))
+	projStub := rt.NewObject()
+	_ = projStub.Set("id", projectID)
+	_ = projStub.Set("name", projectName)
+	_ = ctxStub.Set("req", reqStub)
+	_ = ctxStub.Set("user", goja.Null())
+	_ = ctxStub.Set("doc", goja.Null())
+	_ = ctxStub.Set("project", projStub)
+	_ = ctxStub.Set("db", noopObj)
+	_ = ctxStub.Set("auth", authStub)
+	_ = ctxStub.Set("kv", kvStub)
+	_ = ctxStub.Set("queue", queueStub)
+	_ = ctxStub.Set("env", rt.NewObject())
+	_ = ctxStub.Set("respond", noop)
+	_ = ctxStub.Set("next", noop)
+	_ = ctxStub.Set("cancel", noop)
+	_ = ctxStub.Set("fetch", noop)
+	_ = ctxStub.Set("publish", noop)
+	_ = ctxStub.Set("mail", noop)
+	_ = ctxStub.Set("log", rt.ToValue(makeConsoleFn("log")))
+	_ = rt.Set("ctx", ctxStub)
 
 	if _, err := rt.RunString(string(data)); err != nil {
 		return nil, fmt.Errorf("%s: %w", fileName, err)
 	}
 
 	log.Printf("[fn:%s] loaded %s — %d routes %d crons %d hooks",
-		projectID[:8], fileName, len(reg.routes), len(reg.crons), len(reg.hooks))
+		safePrefix(projectID), fileName, len(reg.routes), len(reg.crons), len(reg.hooks))
 	return reg, nil
 }
 
@@ -275,7 +341,7 @@ func syncRegistry(projectID, projectName string) *projectRegistry {
 		// Load / reload
 		fr, err := loadFile(projectID, projectName, fullPath)
 		if err != nil {
-			log.Printf("[fn:%s] error loading %s: %v", projectID[:8], e.Name(), err)
+			log.Printf("[fn:%s] error loading %s: %v", safePrefix(projectID), e.Name(), err)
 			// Keep stale on error
 			continue
 		}
@@ -409,7 +475,7 @@ func DispatchAppHook(projectID, projectName, event string) {
 		if h.event == event && h.collection == "" {
 			ctx := buildCtxForRuntime(h.rt, projectID, projectName, rctx)
 			if _, err := h.handler(goja.Undefined(), ctx); err != nil {
-				log.Printf("[fn:%s] app hook %s [%s]: %v", projectID[:8], event, h.fileName, err)
+				log.Printf("[fn:%s] app hook %s [%s]: %v", safePrefix(projectID), event, h.fileName, err)
 			}
 		}
 	}
@@ -434,8 +500,18 @@ func RunCronJob(projectID, projectName string, idx int) {
 	rctx := &RunContext{ProjectID: projectID, ProjectName: projectName, ReqMethod: "CRON"}
 	ctx := buildCtxForRuntime(job.rt, projectID, projectName, rctx)
 	if _, err := job.handler(goja.Undefined(), ctx); err != nil {
-		log.Printf("[fn:%s] cron[%d] [%s]: %v", projectID[:8], idx, job.fileName, err)
+		log.Printf("[fn:%s] cron[%d] [%s]: %v", safePrefix(projectID), idx, job.fileName, err)
 	}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// safePrefix returns up to the first 8 chars of s (avoids panic on short IDs).
+func safePrefix(s string) string {
+	if len(s) <= 8 {
+		return s
+	}
+	return s[:8]
 }
 
 // ── Route matching ────────────────────────────────────────────────────────────

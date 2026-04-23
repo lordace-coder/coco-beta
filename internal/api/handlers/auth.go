@@ -22,6 +22,7 @@ import (
 	"github.com/patrick/cocobase/internal/dto"
 	"github.com/patrick/cocobase/internal/models"
 	"github.com/patrick/cocobase/internal/services"
+	fnservice "github.com/patrick/cocobase/internal/services/functions"
 	"gorm.io/gorm"
 )
 
@@ -145,8 +146,29 @@ func findOrCreateOAuthUser(projectID, email, oauthID, provider, name, picture st
 		Data:          data,
 	}
 
+	// Fetch project name for hooks (best-effort; skip hooks on error)
+	var proj models.Project
+	if err := database.DB.Select("id, name").First(&proj, "id = ?", projectID).Error; err == nil {
+		doc := fnservice.AppUserToHookDoc(newUser)
+		if cancelled, msg, mutated := fnservice.DispatchAppUserHook(
+			models.HookBeforeCreate, projectID, proj.Name, doc, nil, nil,
+		); cancelled {
+			return nil, false, fmt.Errorf("hook cancelled: %s", msg)
+		} else {
+			fnservice.ApplyHookDocToUser(mutated, newUser)
+		}
+	}
+
 	if err := database.DB.Create(newUser).Error; err != nil {
 		return nil, false, err
+	}
+
+	// afterCreate hook — fire-and-forget
+	if proj.ID != "" {
+		go fnservice.DispatchAppUserHook(
+			models.HookAfterCreate, projectID, proj.Name,
+			fnservice.AppUserToHookDoc(newUser), newUser, nil,
+		)
 	}
 
 	return newUser, true, nil
@@ -248,9 +270,25 @@ func UserSignup(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to hash password"})
 	}
 
+	// beforeCreate hook — JS can mutate doc fields or cancel
+	doc := fnservice.AppUserToHookDoc(&user)
+	if cancelled, msg, mutated := fnservice.DispatchAppUserHook(
+		models.HookBeforeCreate, project.ID, project.Name, doc, nil, BroadcastToProject,
+	); cancelled {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
+	} else {
+		fnservice.ApplyHookDocToUser(mutated, &user)
+	}
+
 	if err := database.DB.Create(&user).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create user"})
 	}
+
+	// afterCreate hook — fire-and-forget
+	go fnservice.DispatchAppUserHook(
+		models.HookAfterCreate, project.ID, project.Name,
+		fnservice.AppUserToHookDoc(&user), &user, BroadcastToProject,
+	)
 
 	token, err := services.CreateAppUserToken(&user)
 	if err != nil {
@@ -392,8 +430,38 @@ func UpdateCurrentUser(c *fiber.Ctx) error {
 		return c.JSON(dto.AppUserToResponse(user))
 	}
 
+	// beforeUpdate hook — JS can mutate doc fields or cancel
+	var proj models.Project
+	if err := database.DB.Select("id, name").First(&proj, "id = ?", user.ClientID).Error; err == nil {
+		doc := fnservice.AppUserToHookDoc(user)
+		if cancelled, msg, mutated := fnservice.DispatchAppUserHook(
+			models.HookBeforeUpdate, proj.ID, proj.Name, doc, user, BroadcastToProject,
+		); cancelled {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
+		} else {
+			fnservice.ApplyHookDocToUser(mutated, user)
+			// Rebuild updates map to reflect any hook mutations
+			updates = map[string]interface{}{
+				"email": user.Email,
+				"data":  user.Data,
+				"roles": user.Roles,
+			}
+			if user.Password != "" {
+				updates["password"] = user.Password
+			}
+		}
+	}
+
 	if err := database.DB.Model(user).Updates(updates).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update user"})
+	}
+
+	// afterUpdate hook — fire-and-forget
+	if proj.ID != "" {
+		go fnservice.DispatchAppUserHook(
+			models.HookAfterUpdate, proj.ID, proj.Name,
+			fnservice.AppUserToHookDoc(user), user, BroadcastToProject,
+		)
 	}
 
 	return c.JSON(dto.AppUserToResponse(user))
