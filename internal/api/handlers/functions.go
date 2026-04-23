@@ -13,10 +13,6 @@ import (
 // HandleHTTPFunction is mounted at /functions/:projectId/func/:path[/*]
 // It dispatches to the matching route registered in the project's functions.js.
 func HandleHTTPFunction(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	// Build the request path: everything after /func  → /:functionName[/*]
 	funcName := c.Params("functionName")
@@ -49,12 +45,12 @@ func HandleHTTPFunction(c *fiber.Ctx) error {
 		ReqBody:     string(c.Body()),
 		ReqQuery:    query,
 		User:        appUser,
-		ProjectID:   project.ID,
-		ProjectName: project.Name,
+		ProjectID:   instanceID(),
+		ProjectName: "default",
 		Broadcast:   BroadcastToProject,
 	}
 
-	responded, err := fn.DispatchHTTP(project.ID, project.Name, rctx)
+	responded, err := fn.DispatchHTTP(instanceID(), "default", rctx)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":   true,

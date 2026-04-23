@@ -2,24 +2,27 @@ package handlers
 
 import (
 	"github.com/patrick/cocobase/internal/database"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/patrick/cocobase/internal/services"
 )
 
 // Shared service instances used across all handlers
-// These are initialized lazily to avoid nil database.DB
 var (
 	permChecker *services.PermissionChecker
 )
 
 func init() {
-	// Initialize services that don't depend on database
 	permChecker = services.NewPermissionChecker()
 }
 
-// InvalidateCollectionCache clears all cached collection lookups for a project/identifier pair.
-// Call this after any dashboard mutation that changes collection settings (permissions, sentinels, etc.)
-func InvalidateCollectionCache(projectID, colID string) {
-	collectionCache.Delete("col:" + projectID + ":" + colID)
+// instanceID returns the single instance project ID.
+func instanceID() string {
+	return instance.ID()
+}
+
+// InvalidateCollectionCache clears cached collection lookups for an identifier.
+func InvalidateCollectionCache(_, colID string) {
+	collectionCache.Delete("col:" + instanceID() + ":" + colID)
 }
 
 // InitHandlerServices initializes handler services after database connection

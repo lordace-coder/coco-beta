@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/patrick/cocobase/internal/api/handlers"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
@@ -10,7 +11,7 @@ import (
 
 // CreateCollection handles POST /_/api/projects/:id/collections
 func CreateCollection(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -33,7 +34,7 @@ func CreateCollection(c *fiber.Ctx) error {
 
 // CreateDocument handles POST /_/api/projects/:id/collections/:colId/documents (dashboard)
 func CreateDocumentDashboard(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -50,13 +51,13 @@ func CreateDocumentDashboard(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create document"})
 	}
 
-	Log(c.Params("id"), "create_document", "document", doc.ID, col.Name)
+	Log(instance.ID(), "create_document", "document", doc.ID, col.Name)
 	return c.Status(fiber.StatusCreated).JSON(doc)
 }
 
 // ListCollections handles GET /_/api/projects/:id/collections
 func ListCollections(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -70,7 +71,7 @@ func ListCollections(c *fiber.Ctx) error {
 
 // GetCollection handles GET /_/api/projects/:id/collections/:colId
 func GetCollection(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -93,7 +94,7 @@ func GetCollection(c *fiber.Ctx) error {
 
 // UpdateCollection handles PATCH /_/api/projects/:id/collections/:colId
 func UpdateCollection(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -158,10 +159,10 @@ func UpdateCollection(c *fiber.Ctx) error {
 	}
 
 	// Evict cached collection so document handlers pick up new sentinels/permissions
-	handlers.InvalidateCollectionCache(c.Params("id"), col.ID)
-	handlers.InvalidateCollectionCache(c.Params("id"), col.Name)
+	handlers.InvalidateCollectionCache(instance.ID(), col.ID)
+	handlers.InvalidateCollectionCache(instance.ID(), col.Name)
 
-	Log(c.Params("id"), "update_collection", "collection", col.ID, col.Name)
+	Log(instance.ID(), "update_collection", "collection", col.ID, col.Name)
 	return c.JSON(fiber.Map{
 		"id":          col.ID,
 		"name":        col.Name,
@@ -175,7 +176,7 @@ func UpdateCollection(c *fiber.Ctx) error {
 
 // DeleteCollection handles DELETE /_/api/projects/:id/collections/:colId
 func DeleteCollection(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -186,13 +187,13 @@ func DeleteCollection(c *fiber.Ctx) error {
 	if err := database.DB.Delete(col).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete collection"})
 	}
-	Log(c.Params("id"), "delete_collection", "collection", col.ID, col.Name)
+	Log(instance.ID(), "delete_collection", "collection", col.ID, col.Name)
 	return c.JSON(fiber.Map{"message": "Collection deleted"})
 }
 
 // ListDocuments handles GET /_/api/projects/:id/collections/:colId/documents
 func ListDocuments(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -233,7 +234,7 @@ func ListDocuments(c *fiber.Ctx) error {
 
 // GetDocument handles GET /_/api/projects/:id/collections/:colId/documents/:docId
 func GetDocument(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -247,7 +248,7 @@ func GetDocument(c *fiber.Ctx) error {
 
 // UpdateDocument handles PATCH /_/api/projects/:id/collections/:colId/documents/:docId
 func UpdateDocument(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -281,7 +282,7 @@ func UpdateDocument(c *fiber.Ctx) error {
 
 // DeleteDocument handles DELETE /_/api/projects/:id/collections/:colId/documents/:docId
 func DeleteDocument(c *fiber.Ctx) error {
-	col, err := getCollection(c.Params("id"), c.Params("colId"))
+	col, err := getCollection(instance.ID(), c.Params("colId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -290,7 +291,7 @@ func DeleteDocument(c *fiber.Ctx) error {
 		Delete(&models.Document{}).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete document"})
 	}
-	Log(c.Params("id"), "delete_document", "document", c.Params("docId"), col.Name)
+	Log(instance.ID(), "delete_document", "document", c.Params("docId"), col.Name)
 	return c.JSON(fiber.Map{"message": "Document deleted"})
 }
 

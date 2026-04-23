@@ -7,7 +7,6 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/patrick/cocobase/internal/api/middleware"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 	"github.com/patrick/cocobase/internal/services"
@@ -75,7 +74,7 @@ func SubscribeToCollection(c *websocket.Conn) {
 
 	// Verify collection exists and user has access
 	var collection models.Collection
-	if err := database.DB.Where("(id = ? OR name = ?) AND project_id = ?", collectionID, collectionID, project.ID).
+	if err := database.DB.Where("(id = ? OR name = ?) AND project_id = ?", collectionID, collectionID, instanceID()).
 		First(&collection).Error; err != nil {
 		log.Printf("Collection not found: %v", err)
 		c.WriteJSON(fiber.Map{
@@ -94,7 +93,7 @@ func SubscribeToCollection(c *websocket.Conn) {
 
 	// Register connection with filter
 	manager := services.GetConnectionManager()
-	manager.AddConnection(collection.ID, c, filter, project.ID)
+	manager.AddConnection(collection.ID, c, filter, instanceID())
 	defer manager.RemoveConnection(collection.ID, c)
 
 	// Send welcome message
@@ -102,7 +101,7 @@ func SubscribeToCollection(c *websocket.Conn) {
 		"action":          "authenticated",
 		"collection_id":   collection.ID,
 		"collection_name": collection.Name,
-		"project_id":      project.ID,
+		"project_id":      instanceID(),
 		"filter":          filter,
 		"timestamp":       time.Now(),
 		"redis_enabled":   services.IsRedisEnabled(),
@@ -110,7 +109,7 @@ func SubscribeToCollection(c *websocket.Conn) {
 	c.WriteJSON(welcomeMsg)
 
 	log.Printf("📡 WebSocket authenticated: collection=%s, project=%s, filters=%v",
-		collection.ID, project.ID, filter)
+		collection.ID, instanceID(), filter)
 
 	// Keep connection alive and handle incoming messages
 	for {
@@ -154,13 +153,6 @@ func SubscribeToCollection(c *websocket.Conn) {
 // WebSocketUpgrade middleware to upgrade HTTP connection to WebSocket (DEPRECATED)
 func WebSocketUpgrade(c *fiber.Ctx) error {
 	// Authenticate
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
@@ -175,7 +167,7 @@ func WebSocketUpgrade(c *fiber.Ctx) error {
 		filterJSON := c.Query("filter", "{}")
 
 		c.Locals("collectionID", collectionID)
-		c.Locals("projectID", project.ID)
+		c.Locals("projectID", instanceID())
 		c.Locals("filter", filterJSON)
 		c.Locals("actions", actions)
 		return c.Next()
@@ -202,19 +194,12 @@ func BroadcastDocumentChange(collectionID string, action string, document *model
 // @Security ApiKeyAuth
 // @Router /collections/{id}/realtime/stats [get]
 func GetRealtimeStats(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Get collection
 	var collection models.Collection
-	if err := database.DB.Where("(id = ? OR name = ?) AND project_id = ?", collectionID, collectionID, project.ID).
+	if err := database.DB.Where("(id = ? OR name = ?) AND project_id = ?", collectionID, collectionID, instanceID()).
 		First(&collection).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -249,13 +234,6 @@ func GetRealtimeStats(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /realtime/stats [get]
 func GetAllRealtimeStats(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	manager := services.GetConnectionManager()
 	stats := manager.GetAllStats()

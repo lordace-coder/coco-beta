@@ -34,64 +34,55 @@ func SetupDashboardRoutes(app *fiber.App) {
 	protected.Patch("/config", dashboard.UpdateConfig)
 	protected.Post("/config/smtp/test", dashboard.TestSMTP)
 
-	// Available integrations catalogue
-	protected.Get("/integrations", dashboard.ListIntegrations)
-
-	// Single-instance endpoint — returns (or creates) the one default project
+	// Instance config
 	protected.Get("/instance", dashboard.GetInstance)
+	protected.Patch("/instance", dashboard.UpdateInstance)
+	protected.Post("/instance/regen-key", dashboard.RegenAPIKey)
 
-	// Projects
-	projects := protected.Group("/projects")
-	projects.Get("/", dashboard.ListProjects)
-	projects.Post("/", dashboard.CreateProject)
-	projects.Get("/:id", dashboard.GetProject)
-	projects.Patch("/:id", dashboard.UpdateProject)
-	projects.Delete("/:id", dashboard.DeleteProject)
-	projects.Post("/:id/regen-key", dashboard.RegenAPIKey)
+	// Users
+	protected.Get("/users", dashboard.ListUsers)
+	protected.Post("/users", dashboard.CreateUser)
+	protected.Get("/users/:userId", dashboard.GetUser)
+	protected.Patch("/users/:userId", dashboard.UpdateUser)
+	protected.Delete("/users/:userId", dashboard.DeleteUser)
+	protected.Delete("/users", dashboard.DeleteAllUsers)
 
-	// Project → users
-	projects.Get("/:id/users", dashboard.ListUsers)
-	projects.Post("/:id/users", dashboard.CreateUser)
-	projects.Get("/:id/users/:userId", dashboard.GetUser)
-	projects.Patch("/:id/users/:userId", dashboard.UpdateUser)
-	projects.Delete("/:id/users/:userId", dashboard.DeleteUser)
-	projects.Delete("/:id/users", dashboard.DeleteAllUsers)
+	// Collections
+	protected.Get("/collections", dashboard.ListCollections)
+	protected.Post("/collections", dashboard.CreateCollection)
+	protected.Get("/collections/:colId", dashboard.GetCollection)
+	protected.Patch("/collections/:colId", dashboard.UpdateCollection)
+	protected.Delete("/collections/:colId", dashboard.DeleteCollection)
 
-	// Project → collections
-	projects.Get("/:id/collections", dashboard.ListCollections)
-	projects.Post("/:id/collections", dashboard.CreateCollection)
-	projects.Get("/:id/collections/:colId", dashboard.GetCollection)
-	projects.Patch("/:id/collections/:colId", dashboard.UpdateCollection)
-	projects.Delete("/:id/collections/:colId", dashboard.DeleteCollection)
+	// Collection documents
+	protected.Get("/collections/:colId/documents", dashboard.ListDocuments)
+	protected.Post("/collections/:colId/documents", dashboard.CreateDocumentDashboard)
+	protected.Get("/collections/:colId/documents/:docId", dashboard.GetDocument)
+	protected.Patch("/collections/:colId/documents/:docId", dashboard.UpdateDocument)
+	protected.Delete("/collections/:colId/documents/:docId", dashboard.DeleteDocument)
 
-	// Project → collection documents
-	projects.Get("/:id/collections/:colId/documents", dashboard.ListDocuments)
-	projects.Post("/:id/collections/:colId/documents", dashboard.CreateDocumentDashboard)
-	projects.Get("/:id/collections/:colId/documents/:docId", dashboard.GetDocument)
-	projects.Patch("/:id/collections/:colId/documents/:docId", dashboard.UpdateDocument)
-	projects.Delete("/:id/collections/:colId/documents/:docId", dashboard.DeleteDocument)
+	// Activity logs
+	protected.Get("/logs", dashboard.ListLogs)
 
-	// Project → activity logs
-	projects.Get("/:id/logs", dashboard.ListLogs)
+	// Files
+	protected.Get("/files", dashboard.ListFiles)
+	protected.Delete("/files", dashboard.DeleteFile)
 
-	// Project → files
-	projects.Get("/:id/files", dashboard.ListFiles)
-	projects.Delete("/:id/files", dashboard.DeleteFile)
+	// Integrations
+	protected.Get("/integrations/catalogue", dashboard.ListIntegrations)
+	protected.Get("/integrations", dashboard.ListProjectIntegrations)
+	protected.Get("/integrations/:piId", dashboard.GetProjectIntegration)
+	protected.Put("/integrations/:integrationName", dashboard.UpsertProjectIntegration)
+	protected.Delete("/integrations/:piId", dashboard.DeleteProjectIntegration)
 
-	// Project → integrations
-	projects.Get("/:id/integrations", dashboard.ListProjectIntegrations)
-	projects.Get("/:id/integrations/:piId", dashboard.GetProjectIntegration)
-	projects.Put("/:id/integrations/:integrationName", dashboard.UpsertProjectIntegration)
-	projects.Delete("/:id/integrations/:piId", dashboard.DeleteProjectIntegration)
-
-	// Project → cloud functions (multi-file model)
-	projects.Get("/:id/functions", dashboard.ListFunctionFiles)
-	projects.Post("/:id/functions", dashboard.CreateFunctionFile)
-	projects.Get("/:id/functions/crons", dashboard.GetCronSchedule)
-	projects.Get("/:id/functions/:name", dashboard.GetFunctionFile)
-	projects.Put("/:id/functions/:name", dashboard.SaveFunctionFile)
-	projects.Delete("/:id/functions/:name", dashboard.DeleteFunctionFileHandler)
-	projects.Post("/:id/functions/:name/run", dashboard.RunFunctionFile)
+	// Cloud functions
+	protected.Get("/functions", dashboard.ListFunctionFiles)
+	protected.Post("/functions", dashboard.CreateFunctionFile)
+	protected.Get("/functions/crons", dashboard.GetCronSchedule)
+	protected.Get("/functions/:name", dashboard.GetFunctionFile)
+	protected.Put("/functions/:name", dashboard.SaveFunctionFile)
+	protected.Delete("/functions/:name", dashboard.DeleteFunctionFileHandler)
+	protected.Post("/functions/:name/run", dashboard.RunFunctionFile)
 
 	// ── Serve embedded React SPA at /_/* ──────────────────────────────────────
 	app.Get("/_", serveSPA)

@@ -45,14 +45,10 @@ func buildFilterParams(c *fiber.Ctx) map[string][]string {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/query/documents/count [get]
 func CountDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -92,10 +88,6 @@ func CountDocuments(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/query/documents/aggregate [get]
 func AggregateDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	field := c.Query("field")
@@ -110,7 +102,7 @@ func AggregateDocuments(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid operation. Must be: count, sum, avg, min, or max"})
 	}
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -175,10 +167,6 @@ func AggregateDocuments(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/query/documents/group-by [get]
 func GroupByField(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	field := c.Query("field")
@@ -187,7 +175,7 @@ func GroupByField(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Field parameter is required"})
 	}
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -239,14 +227,10 @@ func GroupByField(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/query/schema [get]
 func GetCollectionSchema(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -342,10 +326,6 @@ func GetCollectionSchema(c *fiber.Ctx) error {
 // ─────────────────────────────────────────
 
 func ExportCollection(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	format := c.Query("format", "json")
@@ -354,7 +334,7 @@ func ExportCollection(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid format. Must be 'json' or 'csv'"})
 	}
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}

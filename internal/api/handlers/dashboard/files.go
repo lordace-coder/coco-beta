@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/patrick/cocobase/internal/services"
 	"github.com/patrick/cocobase/pkg/config"
 	applogger "github.com/patrick/cocobase/pkg/logger"
@@ -25,7 +26,7 @@ type fileEntry struct {
 
 // ListFiles handles GET /_/api/projects/:id/files
 func ListFiles(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -93,7 +94,7 @@ func ListFiles(c *fiber.Ctx) error {
 
 // DeleteFile handles DELETE /_/api/projects/:id/files
 func DeleteFile(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}

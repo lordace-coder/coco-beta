@@ -67,13 +67,9 @@ func CreateDocument(c *fiber.Ctx) error {
 		return CreateDocumentWithFile(c)
 	}
 
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -97,7 +93,7 @@ func CreateDocument(c *fiber.Ctx) error {
 	}
 
 	// beforeCreate hook — can cancel
-	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeCreate, project.ID, collection, req.Data, appUser, BroadcastToProject); cancelled {
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeCreate, instanceID(), collection, req.Data, appUser, BroadcastToProject); cancelled {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
 	}
 
@@ -113,9 +109,9 @@ func CreateDocument(c *fiber.Ctx) error {
 	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	// afterCreate hook — fire-and-forget
-	go fnservice.DispatchHook(models.HookAfterCreate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
+	go fnservice.DispatchHook(models.HookAfterCreate, instanceID(), collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
-	go BroadcastDocumentChange(collection.ID, "created", &document, project.ID)
+	go BroadcastDocumentChange(collection.ID, "created", &document, instanceID())
 	return c.Status(fiber.StatusCreated).JSON(toDocumentResponse(&document))
 }
 
@@ -126,10 +122,6 @@ func CreateDocumentLegacy(c *fiber.Ctx) error {
 		return CreateDocumentWithFile(c)
 	}
 
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionName := c.Query("collection")
 	if collectionName == "" {
@@ -144,7 +136,7 @@ func CreateDocumentLegacy(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Document data is required"})
 	}
 
-	collection, err := getCollectionByIDOrName(collectionName, project.ID)
+	collection, err := getCollectionByIDOrName(collectionName, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to get collection"})
 	}
@@ -180,16 +172,12 @@ func CreateDocumentLegacy(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents [get]
 func ListDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 
 	// ── 1. Collection lookup (cached) ────────────────────────────────────
-	cacheKey := fmt.Sprintf("col:%s:%s", project.ID, collectionID)
-	collection, err := getCollectionCached(cacheKey, collectionID, project.ID)
+	cacheKey := fmt.Sprintf("col:%s:%s", instanceID(), collectionID)
+	collection, err := getCollectionCached(cacheKey, collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -252,7 +240,7 @@ func ListDocuments(c *fiber.Ctx) error {
 	}
 
 	if len(relationship) > 0 {
-		query = queryBuilder.ApplyRelationshipFilters(query, relationship, project.ID)
+		query = queryBuilder.ApplyRelationshipFilters(query, relationship, instanceID())
 	}
 
 	query = queryBuilder.ApplySorting(query, sort, order)
@@ -285,7 +273,7 @@ func ListDocuments(c *fiber.Ctx) error {
 	// ── 9. Populate / select ─────────────────────────────────────────────
 	populateRequests := services.ParsePopulateParams(populate, selectFields)
 	if len(populateRequests) > 0 {
-		_ = relationshipResolver.PopulateDocuments(results, project.ID, populateRequests)
+		_ = relationshipResolver.PopulateDocuments(results, instanceID(), populateRequests)
 	} else if selectFields != "" {
 		selectList := strings.Split(selectFields, ",")
 		for i := range results {
@@ -311,15 +299,11 @@ func ListDocuments(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/{docId} [get]
 func GetDocument(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	documentID := c.Params("doc_id")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -348,7 +332,7 @@ func GetDocument(c *fiber.Ctx) error {
 
 	if len(populateRequests) > 0 {
 		results := []map[string]interface{}{result}
-		_ = relationshipResolver.PopulateDocuments(results, project.ID, populateRequests)
+		_ = relationshipResolver.PopulateDocuments(results, instanceID(), populateRequests)
 		result = results[0]
 	} else if selectFields != "" {
 		result = services.SelectFields(result, strings.Split(selectFields, ","))
@@ -377,15 +361,11 @@ func UpdateDocument(c *fiber.Ctx) error {
 		return UpdateDocumentWithFile(c)
 	}
 
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	documentID := c.Params("doc_id")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -425,7 +405,7 @@ func UpdateDocument(c *fiber.Ctx) error {
 	}
 
 	// beforeUpdate hook — can cancel
-	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeUpdate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeUpdate, instanceID(), collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
 	}
 
@@ -440,9 +420,9 @@ func UpdateDocument(c *fiber.Ctx) error {
 	services.FireWebhook(collection.Webhooks.PostSave, "post_save", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	// afterUpdate hook — fire-and-forget
-	go fnservice.DispatchHook(models.HookAfterUpdate, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
+	go fnservice.DispatchHook(models.HookAfterUpdate, instanceID(), collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
-	go BroadcastDocumentChange(collection.ID, "updated", &document, project.ID)
+	go BroadcastDocumentChange(collection.ID, "updated", &document, instanceID())
 
 	return c.JSON(toDocumentResponse(&document))
 }
@@ -460,15 +440,11 @@ func UpdateDocument(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/{docId} [delete]
 func DeleteDocument(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	documentID := c.Params("doc_id")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -490,7 +466,7 @@ func DeleteDocument(c *fiber.Ctx) error {
 	}
 
 	// beforeDelete hook — can cancel
-	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeDelete, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
+	if cancelled, msg := fnservice.DispatchHook(models.HookBeforeDelete, instanceID(), collection, map[string]interface{}(document.Data), appUser, BroadcastToProject); cancelled {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
 	}
 
@@ -505,16 +481,16 @@ func DeleteDocument(c *fiber.Ctx) error {
 	go services.DeleteDocumentFiles(map[string]interface{}(document.Data))
 
 	// Evict cache on delete
-	cacheKey := fmt.Sprintf("col:%s:%s", project.ID, collectionID)
+	cacheKey := fmt.Sprintf("col:%s:%s", instanceID(), collectionID)
 	collectionCache.Delete(cacheKey)
 
 	// post_delete webhook
 	services.FireWebhook(collection.Webhooks.PostDelete, "post_delete", collection.ID, document.ID, map[string]interface{}(document.Data))
 
 	// afterDelete hook — fire-and-forget
-	go fnservice.DispatchHook(models.HookAfterDelete, project.ID, collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
+	go fnservice.DispatchHook(models.HookAfterDelete, instanceID(), collection, map[string]interface{}(document.Data), appUser, BroadcastToProject)
 
-	go BroadcastDocumentChange(collection.ID, "deleted", &document, project.ID)
+	go BroadcastDocumentChange(collection.ID, "deleted", &document, instanceID())
 
 	return c.JSON(fiber.Map{"status": "success", "message": "Document deleted successfully"})
 }

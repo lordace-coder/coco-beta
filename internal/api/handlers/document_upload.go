@@ -96,10 +96,6 @@ func processMultipartFiles(c *fiber.Ctx, projectID, collectionID string, skipFie
 //   - collection  — (for legacy endpoint) collection name/ID
 //   - <any>       — any other field whose value is a file gets uploaded; URL stored under that field name
 func CreateDocumentWithFile(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	if collectionID == "" {
@@ -109,7 +105,7 @@ func CreateDocumentWithFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "collection is required"})
 	}
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -128,7 +124,7 @@ func CreateDocumentWithFile(c *fiber.Ctx) error {
 	}
 
 	// Upload all file fields and merge into documentData
-	fileData, err := processMultipartFiles(c, project.ID, collection.ID)
+	fileData, err := processMultipartFiles(c, instanceID(), collection.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": err.Error()})
 	}
@@ -145,7 +141,7 @@ func CreateDocumentWithFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to create document"})
 	}
 
-	go BroadcastDocumentChange(collection.ID, "created", &document, project.ID)
+	go BroadcastDocumentChange(collection.ID, "created", &document, instanceID())
 	return c.Status(fiber.StatusCreated).JSON(toDocumentResponse(&document))
 }
 
@@ -157,15 +153,11 @@ func CreateDocumentWithFile(c *fiber.Ctx) error {
 //   - override (optional) — "true" to fully replace data instead of merging
 //   - <any>    — any other field whose value is a file gets uploaded; URL stored under that field name
 func UpdateDocumentWithFile(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	collectionID := c.Params("id")
 	documentID := c.Params("docId")
 
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Collection not found"})
 	}
@@ -189,7 +181,7 @@ func UpdateDocumentWithFile(c *fiber.Ctx) error {
 	}
 
 	// Upload all file fields and merge into updateData
-	fileData, err := processMultipartFiles(c, project.ID, collection.ID)
+	fileData, err := processMultipartFiles(c, instanceID(), collection.ID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": err.Error()})
 	}
@@ -274,6 +266,6 @@ func UpdateDocumentWithFile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to update document"})
 	}
 
-	go BroadcastDocumentChange(collection.ID, "updated", &document, project.ID)
+	go BroadcastDocumentChange(collection.ID, "updated", &document, instanceID())
 	return c.JSON(toDocumentResponse(&document))
 }

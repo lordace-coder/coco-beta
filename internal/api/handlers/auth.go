@@ -203,10 +203,6 @@ func getIntegrationConfig(projectID, integrationID string) (models.JSONMap, erro
 // @Security ApiKeyAuth
 // @Router /auth-collections/login [post]
 func UserLogin(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req dto.AppUserLoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -214,7 +210,7 @@ func UserLogin(c *fiber.Ctx) error {
 	}
 
 	var user models.AppUser
-	if err := database.DB.Where("client_id = ? AND email = ?", project.ID, req.Email).First(&user).Error; err != nil {
+	if err := database.DB.Where("client_id = ? AND email = ?", instanceID(), req.Email).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Account with this email does not exist"})
 	}
 
@@ -240,10 +236,6 @@ func UserLogin(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/signup [post]
 func UserSignup(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req dto.AppUserSignupRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -251,7 +243,7 @@ func UserSignup(c *fiber.Ctx) error {
 	}
 
 	var existingUser models.AppUser
-	if err := database.DB.Where("client_id = ? AND email = ?", project.ID, req.Email).First(&existingUser).Error; err == nil {
+	if err := database.DB.Where("client_id = ? AND email = ?", instanceID(), req.Email).First(&existingUser).Error; err == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "User with this email already exists"})
 	}
 
@@ -260,7 +252,7 @@ func UserSignup(c *fiber.Ctx) error {
 	}
 
 	user := models.AppUser{
-		ClientID: project.ID,
+		ClientID: instanceID(),
 		Email:    req.Email,
 		Data:     req.Data,
 		Roles:    models.StringArray{},
@@ -273,7 +265,7 @@ func UserSignup(c *fiber.Ctx) error {
 	// beforeCreate hook — JS can mutate doc fields or cancel
 	doc := fnservice.AppUserToHookDoc(&user)
 	if cancelled, msg, mutated := fnservice.DispatchAppUserHook(
-		models.HookBeforeCreate, project.ID, project.Name, doc, nil, BroadcastToProject,
+		models.HookBeforeCreate, instanceID(), "default", doc, nil, BroadcastToProject,
 	); cancelled {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": msg})
 	} else {
@@ -286,7 +278,7 @@ func UserSignup(c *fiber.Ctx) error {
 
 	// afterCreate hook — fire-and-forget
 	go fnservice.DispatchAppUserHook(
-		models.HookAfterCreate, project.ID, project.Name,
+		models.HookAfterCreate, instanceID(), "default",
 		fnservice.AppUserToHookDoc(&user), &user, BroadcastToProject,
 	)
 
@@ -306,10 +298,6 @@ func UserSignup(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/users [get]
 func ListAllUsers(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	limit := c.QueryInt("limit", 100)
 	offset := c.QueryInt("offset", 0)
@@ -318,10 +306,10 @@ func ListAllUsers(c *fiber.Ctx) error {
 	}
 
 	var total int64
-	database.DB.Model(&models.AppUser{}).Where("client_id = ?", project.ID).Count(&total)
+	database.DB.Model(&models.AppUser{}).Where("client_id = ?", instanceID()).Count(&total)
 
 	var users []models.AppUser
-	if err := database.DB.Where("client_id = ?", project.ID).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
+	if err := database.DB.Where("client_id = ?", instanceID()).Limit(limit).Offset(offset).Find(&users).Error; err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to fetch users"})
 	}
 
@@ -348,14 +336,10 @@ func ListAllUsers(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/users/{id} [get]
 func GetUserByID(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	userID := c.Params("id")
 	var user models.AppUser
-	if err := database.DB.Where("client_id = ? AND id = ?", project.ID, userID).First(&user).Error; err != nil {
+	if err := database.DB.Where("client_id = ? AND id = ?", instanceID(), userID).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 
@@ -481,10 +465,6 @@ func UpdateCurrentUser(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/google-verify [post]
 func VerifyGoogleToken(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		IDToken     string `json:"id_token"`
@@ -499,7 +479,7 @@ func VerifyGoogleToken(c *fiber.Ctx) error {
 	}
 
 	// Check integration is enabled (config optional - Google token self-validates)
-	cfg, _ := getIntegrationConfig(project.ID, GoogleOAuthIntegrationID)
+	cfg, _ := getIntegrationConfig(instanceID(), GoogleOAuthIntegrationID)
 
 	var userInfo *GoogleUserInfo
 	var err error
@@ -518,7 +498,7 @@ func VerifyGoogleToken(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "No email provided by Google"})
 	}
 
-	appUser, isNewUser, err := findOrCreateOAuthUser(project.ID, userInfo.Email, userInfo.Sub, "google", userInfo.Name, userInfo.Picture)
+	appUser, isNewUser, err := findOrCreateOAuthUser(instanceID(), userInfo.Email, userInfo.Sub, "google", userInfo.Name, userInfo.Picture)
 	if err != nil {
 		if strings.Contains(err.Error(), "already registered") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "Email already registered with password. Please login with password."})
@@ -625,12 +605,8 @@ func getGoogleOAuthConfig(projectID string) (*GoogleOAuthConfig, error) {
 // @Security ApiKeyAuth
 // @Router /auth-collections/login-google [get]
 func LoginWithGoogle(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
-	config, err := getGoogleOAuthConfig(project.ID)
+	config, err := getGoogleOAuthConfig(instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": err.Error()})
 	}
@@ -661,10 +637,6 @@ func LoginWithGoogle(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/github-verify [post]
 func VerifyGitHubToken(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		AccessToken string `json:"access_token"`
@@ -675,7 +647,7 @@ func VerifyGitHubToken(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
 	}
 
-	cfg, err := getIntegrationConfig(project.ID, GitHubOAuthIntegrationID)
+	cfg, err := getIntegrationConfig(instanceID(), GitHubOAuthIntegrationID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "GitHub integration not enabled for this project"})
 	}
@@ -710,7 +682,7 @@ func VerifyGitHubToken(c *fiber.Ctx) error {
 	}
 
 	oauthID := fmt.Sprintf("%d", userInfo.ID)
-	appUser, isNewUser, err := findOrCreateOAuthUser(project.ID, userInfo.Email, oauthID, "github", userInfo.Name, userInfo.AvatarURL)
+	appUser, isNewUser, err := findOrCreateOAuthUser(instanceID(), userInfo.Email, oauthID, "github", userInfo.Name, userInfo.AvatarURL)
 	if err != nil {
 		if strings.Contains(err.Error(), "already registered") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "Email already registered with password. Please login with password."})
@@ -844,10 +816,6 @@ func getGitHubPrimaryEmail(accessToken string) (string, error) {
 // @Security ApiKeyAuth
 // @Router /auth-collections/apple-verify [post]
 func VerifyAppleToken(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		IDToken string `json:"id_token"`
@@ -881,7 +849,7 @@ func VerifyAppleToken(c *fiber.Ctx) error {
 		name = strings.TrimSpace(req.User.Name.FirstName + " " + req.User.Name.LastName)
 	}
 
-	appUser, isNewUser, err := findOrCreateOAuthUser(project.ID, userInfo.Email, userInfo.Sub, "apple", name, "")
+	appUser, isNewUser, err := findOrCreateOAuthUser(instanceID(), userInfo.Email, userInfo.Sub, "apple", name, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "already registered") {
 			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": true, "message": "Email already registered with password. Please login with password."})
@@ -1001,10 +969,6 @@ func buildRSAPublicKey(jwk *AppleJWK) (*rsa.PublicKey, error) {
 // @Security ApiKeyAuth
 // @Router /auth-collections/forgot-password [post]
 func ForgotPassword(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		Email string `json:"email"`
@@ -1015,7 +979,7 @@ func ForgotPassword(c *fiber.Ctx) error {
 
 	// Check user exists (don't reveal if not found - security)
 	var user models.AppUser
-	if err := database.DB.Where("client_id = ? AND email = ?", project.ID, req.Email).First(&user).Error; err != nil {
+	if err := database.DB.Where("client_id = ? AND email = ?", instanceID(), req.Email).First(&user).Error; err != nil {
 		// Return success regardless to prevent email enumeration
 		return c.JSON(fiber.Map{"success": true, "message": "If that email exists, a reset link has been sent"})
 	}
@@ -1040,7 +1004,7 @@ func ForgotPassword(c *fiber.Ctx) error {
 	}
 
 	frontendURL := config.AppConfig.FrontendURL
-	go services.SendPasswordResetEmail(project, user.Email, token, frontendURL)
+	go services.SendPasswordResetEmail(nil, user.Email, token, frontendURL)
 
 	return c.JSON(fiber.Map{
 		"message": "If that email exists, a reset link has been sent",
@@ -1057,10 +1021,6 @@ func ForgotPassword(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/reset-password [post]
 func ResetPassword(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		Token    string `json:"token"`
@@ -1082,7 +1042,7 @@ func ResetPassword(c *fiber.Ctx) error {
 
 	// Find user and ensure they belong to this project
 	var user models.AppUser
-	if err := database.DB.Where("id = ? AND client_id = ?", resetToken.UserID, project.ID).First(&user).Error; err != nil {
+	if err := database.DB.Where("id = ? AND client_id = ?", resetToken.UserID, instanceID()).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 
@@ -1179,10 +1139,6 @@ func SendVerificationEmail(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /auth-collections/verify-email/verify [post]
 func VerifyEmail(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Unauthorized"})
-	}
 
 	var req struct {
 		Token string `json:"token"`
@@ -1192,7 +1148,7 @@ func VerifyEmail(c *fiber.Ctx) error {
 	}
 
 	var vToken models.EmailVerificationToken
-	if err := database.DB.Where("token = ? AND client_id = ? AND is_used = ?", req.Token, project.ID, false).First(&vToken).Error; err != nil {
+	if err := database.DB.Where("token = ? AND client_id = ? AND is_used = ?", req.Token, instanceID(), false).First(&vToken).Error; err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid or expired verification token"})
 	}
 

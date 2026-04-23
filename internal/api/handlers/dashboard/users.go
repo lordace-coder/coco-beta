@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/google/uuid"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
@@ -12,7 +13,7 @@ import (
 
 // CreateUser handles POST /_/api/projects/:id/users
 func CreateUser(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -71,7 +72,7 @@ func CreateUser(c *fiber.Ctx) error {
 
 // ListUsers handles GET /_/api/projects/:id/users
 func ListUsers(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -127,7 +128,7 @@ func ListUsers(c *fiber.Ctx) error {
 // GetUser handles GET /_/api/projects/:id/users/:userId
 func GetUser(c *fiber.Ctx) error {
 	var user models.AppUser
-	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), c.Params("id")).First(&user).Error; err != nil {
+	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), instance.ID()).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 	return c.JSON(fiber.Map{
@@ -144,7 +145,7 @@ func GetUser(c *fiber.Ctx) error {
 // UpdateUser handles PATCH /_/api/projects/:id/users/:userId
 func UpdateUser(c *fiber.Ctx) error {
 	var user models.AppUser
-	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), c.Params("id")).First(&user).Error; err != nil {
+	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), instance.ID()).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 
@@ -189,17 +190,17 @@ func UpdateUser(c *fiber.Ctx) error {
 // DeleteUser handles DELETE /_/api/projects/:id/users/:userId
 func DeleteUser(c *fiber.Ctx) error {
 	var user models.AppUser
-	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), c.Params("id")).First(&user).Error; err != nil {
+	if err := database.DB.Where("id = ? AND client_id = ?", c.Params("userId"), instance.ID()).First(&user).Error; err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "User not found"})
 	}
 	database.DB.Delete(&user)
-	Log(c.Params("id"), "delete_user", "user", user.ID, user.Email)
+	Log(instance.ID(), "delete_user", "user", user.ID, user.Email)
 	return c.JSON(fiber.Map{"message": "User deleted"})
 }
 
 // DeleteAllUsers handles DELETE /_/api/projects/:id/users
 func DeleteAllUsers(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}

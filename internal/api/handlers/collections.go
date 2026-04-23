@@ -23,13 +23,6 @@ import (
 // @Security ApiKeyAuth
 // @Router /collections [post]
 func CreateCollection(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	// Parse request body
 	var req models.CollectionCreateRequest
@@ -42,7 +35,7 @@ func CreateCollection(c *fiber.Ctx) error {
 
 	// Check if collection with same name exists
 	var existing models.Collection
-	err := database.DB.Where("name = ? AND project_id = ?", req.Name, project.ID).First(&existing).Error
+	err := database.DB.Where("name = ? AND project_id = ?", req.Name, instanceID()).First(&existing).Error
 	if err == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   true,
@@ -53,7 +46,7 @@ func CreateCollection(c *fiber.Ctx) error {
 	// Create new collection
 	collection := models.Collection{
 		Name:       req.Name,
-		ProjectID:  project.ID,
+		ProjectID:  instanceID(),
 		WebhookURL: req.WebhookURL,
 	}
 
@@ -110,18 +103,11 @@ func CreateCollection(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id} [get]
 func GetCollection(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Try to get collection
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,
@@ -153,18 +139,11 @@ func GetCollection(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id} [patch]
 func UpdateCollection(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Find collection by ID or name
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,
@@ -185,7 +164,7 @@ func UpdateCollection(c *fiber.Ctx) error {
 	if req.Name != nil && *req.Name != collection.Name {
 		// Check for name conflicts
 		var existing models.Collection
-		err := database.DB.Where("name = ? AND project_id = ? AND id != ?", *req.Name, project.ID, collection.ID).
+		err := database.DB.Where("name = ? AND project_id = ? AND id != ?", *req.Name, instanceID(), collection.ID).
 			First(&existing).Error
 		if err == nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -249,18 +228,11 @@ func UpdateCollection(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id} [delete]
 func DeleteCollection(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Find collection
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,

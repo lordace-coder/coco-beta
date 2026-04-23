@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	fn "github.com/patrick/cocobase/internal/services/functions"
 )
 
 // ListFunctionFiles GET /_/api/projects/:id/functions
 // Returns all .js function files for a project.
 func ListFunctionFiles(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -33,7 +34,7 @@ func ListFunctionFiles(c *fiber.Ctx) error {
 // GetFunctionFile GET /_/api/projects/:id/functions/:name
 // Returns the code of a single function file.
 func GetFunctionFile(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	name := c.Params("name")
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
@@ -54,10 +55,9 @@ func GetFunctionFile(c *fiber.Ctx) error {
 // SaveFunctionFile PUT /_/api/projects/:id/functions/:name
 // Writes code to a function file and invalidates the registry.
 func SaveFunctionFile(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	name := c.Params("name")
-	project, err := getProjectByID(projectID)
-	if err != nil {
+	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 
@@ -73,7 +73,7 @@ func SaveFunctionFile(c *fiber.Ctx) error {
 	}
 
 	fn.InvalidateRegistry(projectID)
-	fn.ReloadProjectCrons(projectID, project.Name)
+	fn.ReloadProjectCrons(projectID, "default")
 
 	return c.JSON(fiber.Map{
 		"name":     name,
@@ -85,7 +85,7 @@ func SaveFunctionFile(c *fiber.Ctx) error {
 // CreateFunctionFile POST /_/api/projects/:id/functions
 // Creates a new named function file with a starter stub.
 func CreateFunctionFile(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	project, err := getProjectByID(projectID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
@@ -125,7 +125,7 @@ func CreateFunctionFile(c *fiber.Ctx) error {
 
 // DeleteFunctionFile DELETE /_/api/projects/:id/functions/:name
 func DeleteFunctionFileHandler(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	name := c.Params("name")
 	project, err := getProjectByID(projectID)
 	if err != nil {
@@ -142,7 +142,7 @@ func DeleteFunctionFileHandler(c *fiber.Ctx) error {
 // RunFunctionFile POST /_/api/projects/:id/functions/:name/run
 // Test-runs an HTTP route from a specific file against a given method+path.
 func RunFunctionFile(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	project, err := getProjectByID(projectID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
@@ -196,7 +196,7 @@ func RunFunctionFile(c *fiber.Ctx) error {
 
 // GetCronSchedule GET /_/api/projects/:id/functions/crons
 func GetCronSchedule(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}

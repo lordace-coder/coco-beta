@@ -23,18 +23,11 @@ import (
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/batch-create [post]
 func BatchCreateDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Get collection
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,
@@ -139,18 +132,11 @@ func BatchCreateDocuments(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/batch-update [post]
 func BatchUpdateDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Get collection
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,
@@ -256,18 +242,11 @@ func BatchUpdateDocuments(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /collections/{id}/documents/batch-delete [post]
 func BatchDeleteDocuments(c *fiber.Ctx) error {
-	project := middleware.GetProject(c)
-	if project == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
 
 	collectionID := c.Params("id")
 
 	// Get collection
-	collection, err := getCollectionByIDOrName(collectionID, project.ID)
+	collection, err := getCollectionByIDOrName(collectionID, instanceID())
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":   true,

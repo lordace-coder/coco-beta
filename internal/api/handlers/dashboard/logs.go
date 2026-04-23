@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 	applogger "github.com/patrick/cocobase/pkg/logger"
@@ -27,7 +28,7 @@ func Log(projectID, action, resource, resourceID, detail string) {
 // It reads the server log file and returns the most recent lines.
 // Each line is returned as-is so the dashboard can render the raw log output.
 func ListLogs(c *fiber.Ctx) error {
-	if _, err := getProjectByID(c.Params("id")); err != nil {
+	if _, err := getProjectByID(instance.ID()); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
 

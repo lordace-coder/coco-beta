@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
-	"github.com/patrick/cocobase/internal/database"
-	"github.com/patrick/cocobase/internal/models"
+	"github.com/patrick/cocobase/internal/api/middleware"
+	"github.com/patrick/cocobase/internal/instance"
 )
 
 // NotificationManager manages notification WebSocket connections
@@ -208,11 +208,10 @@ func NotificationWebSocket(c *websocket.Conn) {
 	}
 
 	// Authenticate
-	var project models.Project
-	if err := database.DB.Where("api_key = ? AND active = true", apiKey).First(&project).Error; err != nil {
+	if !middleware.ValidateAPIKey(apiKey) {
 		c.WriteJSON(fiber.Map{
 			"error":   true,
-			"message": "Invalid or inactive API key",
+			"message": "Invalid API key",
 		})
 		c.Close()
 		return
@@ -220,18 +219,18 @@ func NotificationWebSocket(c *websocket.Conn) {
 
 	c.SetReadDeadline(time.Time{})
 
+	instanceID := instance.ID()
+
 	// Register connection
 	manager := GetNotificationManager()
-	manager.AddGlobalConnection(c, project.ID)
+	manager.AddGlobalConnection(c, instanceID)
 	defer manager.RemoveConnection(c)
 
 	// Send welcome
 	c.WriteJSON(fiber.Map{
-		"type":       "connected",
-		"scope":      "global",
-		"project":    project.Name,
-		"project_id": project.ID,
-		"timestamp":  time.Now(),
+		"type":      "connected",
+		"scope":     "global",
+		"timestamp": time.Now(),
 	})
 
 	// Handle messages
@@ -250,9 +249,9 @@ func NotificationWebSocket(c *websocket.Conn) {
 			continue
 		}
 
-		// Broadcast message to all global peers in the same project (excluding sender)
+		// Broadcast message to all global peers (excluding sender)
 		msg.From = c.RemoteAddr().String()
-		manager.BroadcastGlobal(msg, project.ID, c)
+		manager.BroadcastGlobal(msg, instanceID, c)
 	}
 }
 
@@ -312,11 +311,10 @@ func ChannelNotificationWebSocket(c *websocket.Conn) {
 	}
 
 	// Authenticate
-	var project models.Project
-	if err := database.DB.Where("api_key = ? AND active = true", apiKey).First(&project).Error; err != nil {
+	if !middleware.ValidateAPIKey(apiKey) {
 		c.WriteJSON(fiber.Map{
 			"error":   true,
-			"message": "Invalid or inactive API key",
+			"message": "Invalid API key",
 		})
 		c.Close()
 		return
@@ -324,19 +322,19 @@ func ChannelNotificationWebSocket(c *websocket.Conn) {
 
 	c.SetReadDeadline(time.Time{})
 
+	instanceID := instance.ID()
+
 	// Register connection to channel
 	manager := GetNotificationManager()
-	manager.AddChannelConnection(authMsg.Channel, c, project.ID)
+	manager.AddChannelConnection(authMsg.Channel, c, instanceID)
 	defer manager.RemoveConnection(c)
 
 	// Send welcome
 	c.WriteJSON(fiber.Map{
-		"type":       "connected",
-		"scope":      "channel",
-		"channel":    authMsg.Channel,
-		"project":    project.Name,
-		"project_id": project.ID,
-		"timestamp":  time.Now(),
+		"type":      "connected",
+		"scope":     "channel",
+		"channel":   authMsg.Channel,
+		"timestamp": time.Now(),
 	})
 
 	// Handle messages
@@ -355,9 +353,9 @@ func ChannelNotificationWebSocket(c *websocket.Conn) {
 			continue
 		}
 
-		// Broadcast message to all channel peers in the same project (excluding sender)
+		// Broadcast message to all channel peers (excluding sender)
 		msg.From = c.RemoteAddr().String()
-		manager.BroadcastChannel(authMsg.Channel, msg, project.ID, c)
+		manager.BroadcastChannel(authMsg.Channel, msg, instanceID, c)
 	}
 }
 
@@ -400,28 +398,10 @@ func ListBroadcastRooms(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /notifications/stats [get]
 func GetNotificationStats(c *fiber.Ctx) error {
-	// Authenticate
-	apiKey := c.Get("X-API-Key")
-	if apiKey == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
-
-	var project models.Project
-	if err := database.DB.Where("api_key = ? AND active = true", apiKey).First(&project).Error; err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Invalid API key",
-		})
-	}
-
 	manager := GetNotificationManager()
 	stats := manager.GetStats()
 
 	return c.JSON(fiber.Map{
-		"project":   project.Name,
 		"stats":     stats,
 		"timestamp": time.Now(),
 	})
@@ -438,23 +418,6 @@ func GetNotificationStats(c *fiber.Ctx) error {
 // @Security ApiKeyAuth
 // @Router /notifications/send [post]
 func SendNotification(c *fiber.Ctx) error {
-	// Authenticate
-	apiKey := c.Get("X-API-Key")
-	if apiKey == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Unauthorized",
-		})
-	}
-
-	var project models.Project
-	if err := database.DB.Where("api_key = ? AND active = true", apiKey).First(&project).Error; err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   true,
-			"message": "Invalid API key",
-		})
-	}
-
 	// Parse notification
 	var msg NotificationMessage
 	if err := c.BodyParser(&msg); err != nil {
@@ -471,15 +434,13 @@ func SendNotification(c *fiber.Ctx) error {
 		})
 	}
 
+	instanceID := instance.ID()
 	manager := GetNotificationManager()
 
-	// Send to global or channel
 	if msg.Channel != "" {
-		// HTTP POST - broadcast to all (no sender to exclude)
-		manager.BroadcastChannel(msg.Channel, msg, project.ID, nil)
+		manager.BroadcastChannel(msg.Channel, msg, instanceID, nil)
 	} else {
-		// HTTP POST - broadcast to all (no sender to exclude)
-		manager.BroadcastGlobal(msg, project.ID, nil)
+		manager.BroadcastGlobal(msg, instanceID, nil)
 	}
 
 	return c.JSON(fiber.Map{

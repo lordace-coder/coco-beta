@@ -2,13 +2,14 @@ package dashboard
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"github.com/patrick/cocobase/internal/instance"
 	"github.com/patrick/cocobase/internal/database"
 	"github.com/patrick/cocobase/internal/models"
 )
 
 // ListProjectIntegrations handles GET /_/api/projects/:id/integrations
 func ListProjectIntegrations(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	if _, err := getProjectByID(projectID); err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Project not found"})
 	}
@@ -59,7 +60,7 @@ func ListProjectIntegrations(c *fiber.Ctx) error {
 
 // GetProjectIntegration handles GET /_/api/projects/:id/integrations/:piId
 func GetProjectIntegration(c *fiber.Ctx) error {
-	pi, err := getProjectIntegration(c.Params("id"), c.Params("piId"))
+	pi, err := getProjectIntegration(instance.ID(), c.Params("piId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Integration not found"})
 	}
@@ -69,7 +70,7 @@ func GetProjectIntegration(c *fiber.Ctx) error {
 // UpsertProjectIntegration handles PUT /_/api/projects/:id/integrations/:integrationName
 // Creates or updates a project integration by integration name.
 func UpsertProjectIntegration(c *fiber.Ctx) error {
-	projectID := c.Params("id")
+	projectID := instance.ID()
 	integrationName := c.Params("integrationName")
 
 	if _, err := getProjectByID(projectID); err != nil {
@@ -129,7 +130,7 @@ func UpsertProjectIntegration(c *fiber.Ctx) error {
 
 // DeleteProjectIntegration handles DELETE /_/api/projects/:id/integrations/:piId
 func DeleteProjectIntegration(c *fiber.Ctx) error {
-	pi, err := getProjectIntegration(c.Params("id"), c.Params("piId"))
+	pi, err := getProjectIntegration(instance.ID(), c.Params("piId"))
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": true, "message": "Integration not found"})
 	}
